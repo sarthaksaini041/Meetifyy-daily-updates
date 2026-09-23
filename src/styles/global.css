@@ -1,0 +1,199 @@
+@import './variables.css';
+/* @font-face rules live in BaseLayout's inline <style> (base-path aware). */
+
+/* ── Modern Reset ──────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  /* No background here: <body>'s sky must propagate to the canvas so the
+     page-morph surface (z-index -1) can sit between it and the content. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  height: 100dvh;
+  position: relative;
+  /* Background layers are defined once, in BaseLayout's inline <style>. */
+  color: var(--color-text-primary);
+  overflow: hidden;
+}
+
+/* ── Glass surface ─────────────────────────────────────── */
+.glass {
+  background: var(--glass-fill, var(--glass-fill-card));
+  border: var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+/* ── Display type ──────────────────────────────────────── */
+/* Titles and headings use the display serif; UI text stays sans. */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+/* ── Links ─────────────────────────────────────────────── */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── Focus Visible ─────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.search-input-field:focus,
+.search-input-field:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Buttons ───────────────────────────────────────────── */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* ── Tabular Numerals ──────────────────────────────────── */
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Skip Link ─────────────────────────────────────────── */
+.skip-to-content {
+  position: absolute;
+  top: -100px;
+  left: 1.5rem;
+  z-index: 10000;
+  padding: 0.5rem 1rem;
+  background: var(--color-text-primary);
+  color: #ffffff !important;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  transition: top var(--transition-fast);
+}
+
+.skip-to-content:focus {
+  top: 1rem;
+}
+
+/* ── Scrollbars ────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-faint);
+}
+
+/* ── Container ─────────────────────────────────────────── */
+.container {
+  width: 100%;
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* ── Screen Reader Only ────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Reduced Motion ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Headings Anchor Scroll Margin ──────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  scroll-margin-top: calc(var(--header-height) + 1.5rem);
+}
+
+/* ── Mobile: Prevent Input Zoom (iOS) ──────────────────── */
+/* Inputs below 16px trigger auto-zoom on iOS Safari */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Mobile: Safe Area Insets (notched phones) ─────────── */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ── Mobile: Standalone Touch Targets (WCAG 2.5.5) ─────── */
+@media (max-width: 768px) {
+  .mobile-menu-toggle,
+  .drawer-close-btn,
+  .drawer-day-link,
+  .seq-link,
+  .code-copy-btn,
+  .return-home-link,
+  .return-link {
+    min-height: 42px;
+  }
+}
+
+/* ── Tap Highlight Color ───────────────────────────────── */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Smooth momentum scrolling on iOS ─────────────────── */
+html {
+  -webkit-overflow-scrolling: touch;
+}

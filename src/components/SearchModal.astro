@@ -1,0 +1,1712 @@
+---
+import { SECTIONS } from '@/lib/sections.mjs';
+
+// The sections worth filtering by: the ones that get their own card.
+const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
+---
+
+<dialog id="search-modal" class="search-modal" aria-label="Search and filter engineering updates" transition:persist="search-modal">
+  <div class="search-modal-container" id="search-modal-container">
+    <!-- Top Unified Command Bar -->
+    <div class="search-header-bar">
+      <div class="search-input-box">
+        <svg class="search-modal-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          type="search"
+          id="search-input"
+          class="search-input-field"
+          placeholder="Search updates, categories, or fixes…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Search updates"
+        />
+      </div>
+
+      <!-- Header Controls: Filter Button -->
+      <div class="search-header-actions">
+        <button
+          type="button"
+          id="search-filter-btn"
+          class="search-filter-btn"
+          aria-expanded="false"
+          aria-controls="search-filter-shelf"
+          title="Toggle filter panel"
+        >
+          <svg class="filter-btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+          <span class="filter-btn-text">Filter</span>
+          <span id="filter-active-dot" class="filter-active-dot" style="display: none;" aria-hidden="true"></span>
+          <span id="filter-active-badge" class="filter-active-badge" style="display: none;">0</span>
+          <svg class="filter-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <button type="button" id="search-close-btn" class="search-close-btn" aria-label="Close search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Content Viewport Stage (Dedicated screen area below header) -->
+    <div class="search-modal-viewport" id="search-modal-viewport">
+      <!-- Full-Coverage Filter Screen (Dedicated Filter View taking 100% content area) -->
+      <div id="search-filter-shelf" class="search-filter-shelf" role="region" aria-label="Filter panel">
+        <!-- Single Unified Scroll Area for all filter content -->
+        <div class="filter-shelf-body" id="filter-shelf-body">
+          <div class="filter-shelf-inner">
+            <!-- 1. Date Section Card -->
+            <div class="filter-section-card">
+              <div class="filter-section-header">
+                <span class="filter-section-title">Date</span>
+              </div>
+              <div class="filter-date-pills" id="filter-date-pills" role="radiogroup" aria-label="Date range">
+                <button type="button" class="date-pill active" data-date="all" role="radio" aria-checked="true">All time</button>
+                <button type="button" class="date-pill" data-date="today" role="radio" aria-checked="false">Today</button>
+                <button type="button" class="date-pill" data-date="week" role="radio" aria-checked="false">This week</button>
+                <button type="button" class="date-pill" data-date="month" role="radio" aria-checked="false">This month</button>
+                <button type="button" class="date-pill" data-date="custom" role="radio" aria-checked="false">Custom</button>
+              </div>
+              <div class="filter-custom-date" id="filter-custom-date" style="display: none;">
+                <div class="custom-date-field">
+                  <label for="filter-date-from">From</label>
+                  <input type="date" id="filter-date-from" class="date-input" />
+                </div>
+                <div class="custom-date-field">
+                  <label for="filter-date-to">To</label>
+                  <input type="date" id="filter-date-to" class="date-input" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Categories Section Card -->
+            <div class="filter-section-card">
+              <div class="filter-section-header">
+                <span class="filter-section-title">Categories</span>
+                <span class="filter-section-hint">Select one or more</span>
+              </div>
+              <div class="filter-categories-grid" id="filter-categories-grid">
+                <!-- Dynamically populated from index -->
+              </div>
+            </div>
+
+            <!-- 3. Section filter (options come from src/lib/sections.mjs) -->
+            <div class="filter-extras-grid">
+              <div class="filter-section-card">
+                <div class="filter-section-header">
+                  <span class="filter-section-title">Includes Section</span>
+                </div>
+                <div class="filter-types-list">
+                  {FILTERABLE_SECTIONS.map((section) => (
+                    <label class="filter-checkbox-label">
+                      <input type="checkbox" class="filter-type-cb" value={section.key} data-label={section.heading} />
+                      <span class="cb-box"></span>
+                      <span class="cb-label">{section.heading}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sticky Footer Action Bar -->
+        <div class="filter-shelf-footer">
+          <button type="button" id="filter-reset-btn" class="filter-reset-action">
+            Reset filters
+          </button>
+          <button type="button" id="filter-done-btn" class="filter-done-action">
+            Done
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Stage: slides down and out of view when filter opens -->
+      <div class="search-results-stage" id="search-results-stage">
+        <!-- Active Filters Chips Bar -->
+        <div id="active-filters-bar" class="active-filters-bar" style="display: none;">
+          <div class="active-chips-wrapper" id="active-chips-wrapper">
+            <!-- Rendered via JS -->
+          </div>
+          <button type="button" id="clear-all-filters-btn" class="clear-all-btn">
+            Clear all
+          </button>
+        </div>
+
+        <!-- Search Results Area -->
+        <div class="search-results-area" id="search-results-area" role="region" aria-live="polite">
+          <!-- Empty Prompt -->
+          <div class="search-empty-prompt" id="search-empty-prompt" style="display: none;">
+            <p class="empty-prompt-title">Browse Engineering Updates</p>
+            <p class="empty-prompt-desc">Search by keyword or filter by category and date.</p>
+          </div>
+
+          <!-- Populated Results List -->
+          <div class="search-results-list" id="search-results-list">
+            <!-- Rendered via JS -->
+          </div>
+
+          <!-- No Results State -->
+          <div class="search-no-results" id="search-no-results" style="display: none;">
+            <p class="no-results-title">No updates found</p>
+            <p class="no-results-hint">Try adjusting keywords or clearing active filters.</p>
+            <button type="button" id="empty-clear-filters-btn" class="empty-clear-btn" style="display: none;">
+              Clear filters
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<style is:global>
+  /* ─── Search Modal Dialog ─────────────────────────────── */
+  .search-modal {
+    position: fixed;
+    top: 9%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    width: min(720px, calc(100vw - 2.5rem));
+    height: min(600px, 82vh);
+    max-height: min(640px, 84vh);
+    padding: 0;
+    border: var(--glass-border);
+    border-radius: 20px;
+    background: var(--glass-fill-overlay);
+    box-shadow:
+      0 0 0 1px rgba(15, 23, 42, 0.04),
+      0 28px 72px -16px rgba(15, 23, 42, 0.2),
+      0 12px 32px -6px rgba(15, 23, 42, 0.08);
+    color: var(--color-text-primary);
+    overflow: hidden;
+    z-index: 1000;
+  }
+
+  .search-modal::backdrop {
+    /* Lighter dim so the page stays perceptible behind the glass sheet. */
+    background: rgba(15, 23, 42, 0.3);
+  }
+
+  .search-modal-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  /* ─── Viewport Stage (holds sliding panels) ────────────── */
+  .search-modal-viewport {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    background: transparent;
+  }
+
+  /* ─── Unified Command Bar Header ─────────────────────── */
+  .search-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 64px;
+    padding: 0 1.25rem 0 1.45rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+    background: rgba(255, 255, 255, 0.35);
+    z-index: 20;
+    flex-shrink: 0;
+  }
+
+  .search-input-box {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .search-modal-icon {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: color var(--transition-fast);
+  }
+
+  .search-modal:focus-within .search-modal-icon {
+    color: var(--color-brand);
+  }
+
+  .search-input-field {
+    flex: 1;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    background: transparent;
+    min-width: 0;
+    line-height: 1.4;
+    letter-spacing: -0.015em;
+    caret-color: var(--color-brand);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .search-input-field:focus,
+  .search-input-field:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .search-input-field::placeholder {
+    color: var(--color-text-faint);
+    font-weight: 400;
+    font-size: 1.02rem;
+  }
+
+  .search-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Close button: only needed when search is full-screen (mobile). */
+  .search-close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-bg-subtle);
+    border: none;
+    color: var(--color-text-secondary);
+  }
+
+  .search-close-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* ─── Refined Filter Button ───────────────────────────── */
+  .search-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 34px;
+    padding: 0 0.9rem;
+    border-radius: var(--radius-full);
+    background: var(--color-bg-subtle);
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    font-weight: 550;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      background-color var(--transition-fast),
+      box-shadow var(--transition-fast);
+  }
+
+  .search-filter-btn:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.05);
+  }
+
+  .search-filter-btn[aria-expanded="true"] {
+    background: var(--color-brand-light);
+    border-color: var(--color-brand-muted);
+    color: var(--color-brand);
+  }
+
+  .search-filter-btn.active {
+    background: var(--color-brand-light);
+    border-color: var(--color-brand-muted);
+    color: var(--color-brand);
+    font-weight: 600;
+  }
+
+  .filter-active-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-brand);
+    flex-shrink: 0;
+  }
+
+  .filter-active-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-full);
+    background: var(--color-brand);
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .filter-chevron {
+    transition: transform var(--transition-fast);
+    flex-shrink: 0;
+    color: currentColor;
+  }
+
+  .search-filter-btn[aria-expanded="true"] .filter-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* ─── Full-Coverage Filter Panel (Slides from top) ─────── */
+  /* ─── Dedicated Filter Screen (Full-Coverage Takeover) ───── */
+  .search-filter-shelf {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: #f8fafc;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition:
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .search-modal-container.filter-open .search-filter-shelf {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  /* ─── Results Stage (Completely hidden when filters are open) ─── */
+  .search-results-stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    z-index: 5;
+    background: transparent;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition:
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* When filter view is open: completely hide results so they NEVER peek through and cannot compete for scroll */
+  .search-modal-container.filter-open .search-results-stage {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* ─── Single Unified Scroll Area for Filter Content ───────── */
+  .filter-shelf-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .filter-shelf-body::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .filter-shelf-body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .filter-shelf-body::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 9999px;
+  }
+
+  .filter-shelf-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.6);
+  }
+
+  .filter-shelf-inner {
+    padding: 0.95rem 1.15rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* ─── Rounded Filter Section Cards ───────────────────── */
+  .filter-section-card {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    border-radius: 12px;
+    padding: 0.85rem 1.05rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
+  }
+
+  .filter-section-card:hover {
+    border-color: rgba(203, 213, 225, 0.95);
+  }
+
+  .filter-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .filter-section-title {
+    font-size: 0.76rem;
+    font-weight: 650;
+    text-transform: none;
+    letter-spacing: -0.01em;
+    color: #334155;
+    line-height: 1.2;
+  }
+
+  .filter-section-hint {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-weight: 400;
+  }
+
+  /* ── Date Pills ──────────────────────────────────────── */
+  .filter-date-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .date-pill {
+    padding: 0.3rem 0.7rem;
+    border-radius: 7px;
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    color: #475569;
+    font-size: 0.77rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background-color var(--transition-fast),
+      box-shadow var(--transition-fast);
+  }
+
+  .date-pill:hover {
+    color: #0f172a;
+    border-color: rgba(203, 213, 225, 0.95);
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
+
+  .date-pill.active {
+    background: #eff2fe;
+    border-color: #c7d2fe;
+    color: #4338ca;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(67, 56, 202, 0.06);
+  }
+
+  .filter-custom-date {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.35rem;
+    flex-wrap: wrap;
+    border-top: 1px dashed rgba(226, 232, 240, 0.9);
+    margin-top: 0.25rem;
+  }
+
+  .custom-date-field {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.76rem;
+    color: #64748b;
+  }
+
+  .date-input {
+    font-family: inherit;
+    font-size: 0.76rem;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    background: #ffffff;
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .date-input:focus {
+    border-color: var(--color-brand);
+  }
+
+  /* ── Categories Grid: Clean 3-Column Unboxed Selectable Rows ── */
+  .filter-categories-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.15rem 0.75rem;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  /* ── Unboxed Selectable Rows (Categories & Includes Section) ── */
+  .filter-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.28rem 0.45rem;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.81rem;
+    color: #334155;
+    transition:
+      background-color var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .filter-checkbox-label:hover {
+    background: rgba(241, 245, 249, 0.75);
+    color: #0f172a;
+  }
+
+  .filter-checkbox-label:has(input[type="checkbox"]:checked) {
+    background: rgba(239, 242, 254, 0.7);
+    color: var(--color-brand);
+    font-weight: 550;
+  }
+
+  .filter-checkbox-label input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .cb-box {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 4px;
+    background: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition:
+      background-color var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .filter-checkbox-label:hover .cb-box {
+    border-color: #94a3b8;
+  }
+
+  .filter-checkbox-label input[type="checkbox"]:checked + .cb-box {
+    background: var(--color-brand);
+    border-color: var(--color-brand);
+  }
+
+  .filter-checkbox-label input[type="checkbox"]:checked + .cb-box::after {
+    content: '';
+    width: 3.5px;
+    height: 7px;
+    border: solid #ffffff;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg) translate(-0.5px, -0.5px);
+  }
+
+  .cb-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+
+  .cb-count {
+    font-size: 0.68rem;
+    color: #64748b;
+    background: rgba(241, 245, 249, 0.95);
+    padding: 0.08rem 0.45rem;
+    border-radius: 9999px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .filter-checkbox-label:has(input[type="checkbox"]:checked) .cb-count {
+    background: rgba(224, 231, 255, 0.9);
+    color: #4338ca;
+  }
+
+  /* ── Extras Grid (Includes Section card) ─────────────────── */
+  .filter-extras-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    align-items: start;
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .filter-types-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  /* ── Dedicated Pinned Footer ───────────────────────────── */
+  .filter-shelf-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.85);
+    background: rgba(255, 255, 255, 0.5);
+    z-index: 20;
+    flex-shrink: 0;
+    box-shadow: 0 -1px 3px rgba(15, 23, 42, 0.02);
+  }
+
+  .filter-reset-action {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast);
+  }
+
+  .filter-reset-action:hover {
+    color: var(--color-brand);
+    text-decoration: underline;
+  }
+
+  .filter-done-action {
+    font-size: 0.79rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: var(--color-brand);
+    border: none;
+    border-radius: var(--radius-full);
+    padding: 0.42rem 1.35rem;
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      box-shadow var(--transition-fast),
+      transform var(--transition-fast);
+    box-shadow: 0 2px 8px rgba(79, 103, 245, 0.28);
+  }
+
+  .filter-done-action:hover {
+    background: var(--color-brand-hover);
+    box-shadow: 0 4px 12px rgba(79, 103, 245, 0.35);
+    transform: translateY(-0.5px);
+  }
+
+  .filter-done-action:active {
+    transform: translateY(0);
+  }
+
+  /* ─── Active Filters Bar ──────────────────────────────── */
+  .active-filters-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.45rem 1.45rem;
+    background: var(--color-bg-subtle);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.74rem;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .active-chips-wrapper {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    flex: 1;
+  }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-secondary);
+    font-size: 0.73rem;
+    font-weight: 500;
+    line-height: 1.3;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
+
+  .filter-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+  }
+
+  .filter-chip-remove:hover {
+    color: var(--color-text-primary);
+  }
+
+  .clear-all-btn {
+    font-size: 0.73rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0.15rem 0.35rem;
+  }
+
+  .clear-all-btn:hover {
+    color: var(--color-brand);
+  }
+
+  /* ─── Search Results Area ─────────────────────────────── */
+  .search-results-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.85rem 1.25rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .search-empty-prompt {
+    padding: 3.5rem 1.5rem;
+    text-align: center;
+    margin: auto 0;
+  }
+
+  .empty-prompt-title {
+    font-size: 1.05rem;
+    font-weight: 650;
+    color: var(--color-text-primary);
+    margin-bottom: 0.35rem;
+  }
+
+  .empty-prompt-desc {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    max-width: 360px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  .search-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  @media (hover: hover) {
+    .search-result-item:hover {
+      border-color: rgba(79, 103, 245, 0.28);
+      box-shadow:
+        inset 3.5px 0 0 0 var(--color-brand),
+        0 6px 16px -4px rgba(79, 103, 245, 0.09),
+        0 2px 6px -1px rgba(15, 23, 42, 0.04);
+      color: var(--color-text-primary);
+    }
+  }
+
+  /* ─── Result Card Item ────────────────────────────────── */
+  .search-result-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+    padding: 0.95rem 1.15rem;
+    border-radius: 13px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.62);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.02);
+    transition:
+      background-color var(--transition-fast),
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .search-result-item.selected {
+    background: #ffffff;
+    border-color: rgba(79, 103, 245, 0.28);
+    box-shadow:
+      inset 3.5px 0 0 0 var(--color-brand),
+      0 6px 16px -4px rgba(79, 103, 245, 0.09),
+      0 2px 6px -1px rgba(15, 23, 42, 0.04);
+    color: var(--color-text-primary);
+    transform: translateX(2px);
+  }
+
+  .result-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+
+  .result-date {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--color-brand);
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .result-tags-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  /* Fixed category badges with proper spacing & separation */
+  .result-tag-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 550;
+    color: var(--color-text-secondary);
+    background: rgba(241, 245, 249, 0.95);
+    padding: 0.16rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    white-space: nowrap;
+  }
+
+  .result-commits {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--color-text-muted); /* faint gray was ~2.6:1 at 11px */
+    font-variant-numeric: tabular-nums;
+  }
+
+  .result-title {
+    font-size: 0.98rem;
+    font-weight: 650;
+    color: var(--color-text-primary);
+    line-height: 1.35;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .result-snippet {
+    font-size: 0.83rem;
+    color: #64748b;
+    line-height: 1.55;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Search keyword highlight */
+  mark.search-highlight {
+    background: rgba(79, 103, 245, 0.12);
+    color: var(--color-brand);
+    font-weight: 600;
+    border-radius: 3px;
+    padding: 0.04em 0.22em;
+  }
+
+  /* No results state */
+  .search-no-results {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    margin: auto 0;
+  }
+
+  .no-results-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .no-results-hint {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    max-width: 320px;
+    margin: 0;
+  }
+
+  .empty-clear-btn {
+    margin-top: 0.4rem;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: var(--color-brand);
+    background: var(--color-brand-light);
+    border: 1px solid var(--color-brand-muted);
+    border-radius: var(--radius-md);
+    padding: 0.28rem 0.8rem;
+    cursor: pointer;
+    transition:
+      background-color var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .empty-clear-btn:hover {
+    background: var(--color-brand-muted);
+    color: var(--color-brand-hover);
+  }
+
+  /* ─── Responsive Behavior ─────────────────────────────── */
+  @media (max-width: 640px) {
+    /* Full-screen sheet. The UA stylesheet gives <dialog> a max-width /
+       max-height of calc(100% - 6px - 2em) and auto margins, which is what
+       left a gap around it; those must be reset explicitly. */
+    .search-modal {
+      inset: 0;
+      transform: none;
+      margin: 0;
+      width: 100%;
+      max-width: none;
+      height: 100vh;
+      height: 100dvh;
+      max-height: none;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      overscroll-behavior: contain;
+    }
+
+    .search-modal-container {
+      max-height: none;
+    }
+
+    .search-header-bar {
+      height: 60px;
+      padding: 0 0.75rem 0 1rem;
+      gap: 0.6rem;
+    }
+
+    .search-input-box {
+      gap: 0.6rem;
+    }
+
+    .search-modal-icon {
+      width: 17px;
+      height: 17px;
+    }
+
+    .search-filter-btn {
+      height: 36px;
+      padding: 0 0.75rem;
+    }
+
+    .search-filter-btn .filter-chevron {
+      display: none;
+    }
+
+    .search-close-btn {
+      display: inline-flex;
+    }
+
+    .search-results-area {
+      padding: 0.75rem 0.85rem 1.25rem;
+    }
+
+    .filter-shelf-inner {
+      padding: 0.85rem 0.95rem 1rem;
+      gap: 0.65rem;
+    }
+
+    .filter-section-card {
+      padding: 0.75rem 0.9rem;
+      border-radius: 12px;
+    }
+
+    .filter-categories-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.15rem 0.5rem;
+      max-height: none;
+      overflow-y: visible;
+    }
+
+    .filter-extras-grid {
+      grid-template-columns: 1fr;
+      gap: 0.65rem;
+    }
+
+    .filter-shelf-footer {
+      padding: 0.75rem 1rem;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .filter-categories-grid {
+      grid-template-columns: 1fr;
+      gap: 0.1rem 0;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .search-header-bar {
+      padding: 0 0.65rem;
+      gap: 0.5rem;
+    }
+
+    .search-filter-btn {
+      padding: 0 0.5rem;
+      font-size: 0.72rem;
+    }
+
+    .filter-shelf-inner {
+      padding: 0.65rem 0.75rem;
+      gap: 0.6rem;
+    }
+
+    .filter-section-card {
+      padding: 0.65rem 0.75rem;
+    }
+
+    .date-pill {
+      padding: 0.28rem 0.55rem;
+      font-size: 0.74rem;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck -- plain DOM script, previously inlined into every page.
+  // Bundled now so browsers download and cache it once.
+  (function() {
+    const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+    let searchIndex = null;
+    let selectedIndex = -1;
+
+    // Filter State
+    const filterState = {
+      query: '',
+      categories: new Set(),
+      dateRange: 'all', // 'all' | 'today' | 'week' | 'month' | 'custom'
+      customFrom: '',
+      customTo: '',
+      sections: new Set() // section keys from src/lib/sections.mjs
+    };
+
+    async function loadSearchIndex() {
+      if (searchIndex) return searchIndex;
+      try {
+        const res = await fetch(`${baseUrl}/search-index.json`);
+        if (!res.ok) throw new Error('Search index response was not ok');
+        searchIndex = await res.json();
+        return searchIndex;
+      } catch (err) {
+        console.error('Failed to load search index:', err);
+        return [];
+      }
+    }
+
+    function initSearch() {
+      const dialog = document.getElementById('search-modal');
+      const modalContainer = document.getElementById('search-modal-container');
+      const input = document.getElementById('search-input');
+      const openBtn = document.getElementById('open-search-btn');
+      const closeBtn = document.getElementById('search-close-btn');
+      const filterBtn = document.getElementById('search-filter-btn');
+      const filterActiveDot = document.getElementById('filter-active-dot');
+      const filterActiveBadge = document.getElementById('filter-active-badge');
+      const activeFiltersBar = document.getElementById('active-filters-bar');
+      const activeChipsWrapper = document.getElementById('active-chips-wrapper');
+      const clearAllFiltersBtn = document.getElementById('clear-all-filters-btn');
+      const categoriesGrid = document.getElementById('filter-categories-grid');
+      const filterResetBtn = document.getElementById('filter-reset-btn');
+      const filterDoneBtn = document.getElementById('filter-done-btn');
+      const customDateContainer = document.getElementById('filter-custom-date');
+      const dateFromInput = document.getElementById('filter-date-from');
+      const dateToInput = document.getElementById('filter-date-to');
+      const resultsList = document.getElementById('search-results-list');
+      const emptyPrompt = document.getElementById('search-empty-prompt');
+      const noResults = document.getElementById('search-no-results');
+      const emptyClearBtn = document.getElementById('empty-clear-filters-btn');
+
+      if (!dialog || !input) return;
+
+      // Toggle Filter Shelf
+      function toggleFilterShelf(open) {
+        const isCurrentlyOpen = modalContainer ? modalContainer.classList.contains('filter-open') : false;
+        const shouldOpen = open !== undefined ? open : !isCurrentlyOpen;
+        if (modalContainer) {
+          modalContainer.classList.toggle('filter-open', shouldOpen);
+        }
+        filterBtn?.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+      }
+
+      filterBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFilterShelf();
+      });
+
+      filterDoneBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFilterShelf(false);
+      });
+
+      filterResetBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetAllFilters();
+      });
+
+      clearAllFiltersBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetAllFilters();
+      });
+
+      emptyClearBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetAllFilters();
+      });
+
+      function resetAllFilters() {
+        filterState.categories.clear();
+        filterState.dateRange = 'all';
+        filterState.customFrom = '';
+        filterState.customTo = '';
+        filterState.sections.clear();
+
+        // Reset Date pills
+        document.querySelectorAll('#filter-date-pills .date-pill').forEach(btn => {
+          const isAll = btn.dataset.date === 'all';
+          btn.classList.toggle('active', isAll);
+          btn.setAttribute('aria-checked', isAll ? 'true' : 'false');
+        });
+        if (customDateContainer) customDateContainer.style.display = 'none';
+        if (dateFromInput) dateFromInput.value = '';
+        if (dateToInput) dateToInput.value = '';
+
+        // Reset Category checkboxes
+        document.querySelectorAll('.filter-cat-cb').forEach(cb => {
+          cb.checked = false;
+        });
+
+        // Reset Section checkboxes
+        document.querySelectorAll('.filter-type-cb').forEach(cb => {
+          cb.checked = false;
+        });
+
+        updateFilterUI();
+        executeSearch();
+      }
+
+      // Populate Categories dynamically
+      function populateCategories(data) {
+        if (!categoriesGrid || categoriesGrid.children.length > 0) return;
+
+        // Count occurrences per category
+        const catCounts = new Map();
+        for (const item of data) {
+          for (const cat of item.categories) {
+            catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+          }
+        }
+
+        // Sort descending by count, then alphabetically
+        const sortedCats = Array.from(catCounts.entries()).sort((a, b) => {
+          if (b[1] !== a[1]) return b[1] - a[1];
+          return a[0].localeCompare(b[0]);
+        });
+
+        categoriesGrid.innerHTML = sortedCats.map(([cat, count]) => {
+          return `
+            <label class="filter-checkbox-label">
+              <input type="checkbox" class="filter-cat-cb" value="${cat}" />
+              <span class="cb-box"></span>
+              <span class="cb-label" title="${cat}">${cat}</span>
+              <span class="cb-count">${count}</span>
+            </label>
+          `;
+        }).join('');
+
+        // Wire up change events
+        categoriesGrid.querySelectorAll('.filter-cat-cb').forEach(cb => {
+          cb.addEventListener('change', (e) => {
+            if (e.target.checked) {
+              filterState.categories.add(e.target.value);
+            } else {
+              filterState.categories.delete(e.target.value);
+            }
+            updateFilterUI();
+            executeSearch();
+          });
+        });
+      }
+
+      // Wire Date Range pills
+      document.querySelectorAll('#filter-date-pills .date-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          document.querySelectorAll('#filter-date-pills .date-pill').forEach(p => {
+            p.classList.remove('active');
+            p.setAttribute('aria-checked', 'false');
+          });
+          pill.classList.add('active');
+          pill.setAttribute('aria-checked', 'true');
+
+          const range = pill.dataset.date;
+          filterState.dateRange = range;
+
+          if (range === 'custom') {
+            customDateContainer.style.display = 'flex';
+          } else {
+            customDateContainer.style.display = 'none';
+          }
+
+          updateFilterUI();
+          executeSearch();
+        });
+      });
+
+      dateFromInput?.addEventListener('input', (e) => {
+        filterState.customFrom = e.target.value;
+        updateFilterUI();
+        executeSearch();
+      });
+
+      dateToInput?.addEventListener('input', (e) => {
+        filterState.customTo = e.target.value;
+        updateFilterUI();
+        executeSearch();
+      });
+
+      // Wire Section Type checkboxes
+      document.querySelectorAll('.filter-type-cb').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            filterState.sections.add(e.target.value);
+          } else {
+            filterState.sections.delete(e.target.value);
+          }
+          updateFilterUI();
+          executeSearch();
+        });
+      });
+
+      // Count active filters & update UI
+      function getActiveFilterCount() {
+        let count = 0;
+        count += filterState.categories.size;
+        if (filterState.dateRange !== 'all') count += 1;
+        count += filterState.sections.size;
+        return count;
+      }
+
+      function updateFilterUI() {
+        const count = getActiveFilterCount();
+
+        // Update badge/dot on Filter button
+        if (count > 0) {
+          if (filterActiveDot) filterActiveDot.style.display = 'inline-block';
+          if (filterActiveBadge) {
+            filterActiveBadge.style.display = 'inline-flex';
+            filterActiveBadge.textContent = String(count);
+          }
+          filterBtn.classList.add('active');
+        } else {
+          if (filterActiveDot) filterActiveDot.style.display = 'none';
+          if (filterActiveBadge) filterActiveBadge.style.display = 'none';
+          filterBtn.classList.remove('active');
+        }
+
+        // Render Active Chips bar
+        if (count > 0) {
+          activeFiltersBar.style.display = 'flex';
+          const chips = [];
+
+          // Categories chips
+          for (const cat of filterState.categories) {
+            chips.push(`
+              <span class="filter-chip">
+                <span>${cat}</span>
+                <span class="filter-chip-remove" data-remove-type="category" data-remove-val="${cat}" role="button" aria-label="Remove ${cat} filter">×</span>
+              </span>
+            `);
+          }
+
+          // Date chip
+          if (filterState.dateRange !== 'all') {
+            let label = 'Date: ' + filterState.dateRange;
+            if (filterState.dateRange === 'today') label = 'Today';
+            else if (filterState.dateRange === 'week') label = 'This week';
+            else if (filterState.dateRange === 'month') label = 'This month';
+            else if (filterState.dateRange === 'custom') {
+              const from = filterState.customFrom || 'Start';
+              const to = filterState.customTo || 'End';
+              label = `${from} → ${to}`;
+            }
+            chips.push(`
+              <span class="filter-chip">
+                <span>${label}</span>
+                <span class="filter-chip-remove" data-remove-type="date" role="button" aria-label="Remove date filter">×</span>
+              </span>
+            `);
+          }
+
+          // Section chips
+          for (const sec of filterState.sections) {
+            const label = document.querySelector(`.filter-type-cb[value="${sec}"]`)?.dataset.label || sec;
+            chips.push(`
+              <span class="filter-chip">
+                <span>${label}</span>
+                <span class="filter-chip-remove" data-remove-type="section" data-remove-val="${sec}" role="button" aria-label="Remove ${sec} filter">×</span>
+              </span>
+            `);
+          }
+
+          activeChipsWrapper.innerHTML = chips.join('');
+
+          // Wire chip dismiss buttons
+          activeChipsWrapper.querySelectorAll('.filter-chip-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const type = btn.dataset.removeType;
+              const val = btn.dataset.removeVal;
+
+              if (type === 'category') {
+                filterState.categories.delete(val);
+                const cb = categoriesGrid?.querySelector(`input[value="${val}"]`);
+                if (cb) cb.checked = false;
+              } else if (type === 'date') {
+                filterState.dateRange = 'all';
+                filterState.customFrom = '';
+                filterState.customTo = '';
+                document.querySelectorAll('#filter-date-pills .date-pill').forEach(p => {
+                  const isAll = p.dataset.date === 'all';
+                  p.classList.toggle('active', isAll);
+                  p.setAttribute('aria-checked', isAll ? 'true' : 'false');
+                });
+                if (customDateContainer) customDateContainer.style.display = 'none';
+                if (dateFromInput) dateFromInput.value = '';
+                if (dateToInput) dateToInput.value = '';
+              } else if (type === 'section') {
+                filterState.sections.delete(val);
+                const cb = document.querySelector(`.filter-type-cb[value="${val}"]`);
+                if (cb) cb.checked = false;
+              }
+
+              updateFilterUI();
+              executeSearch();
+            });
+          });
+        } else {
+          activeFiltersBar.style.display = 'none';
+          activeChipsWrapper.innerHTML = '';
+        }
+      }
+
+      async function openModal() {
+        if (dialog.open) return;
+        // The long placeholder is truncated on narrow screens.
+        input.placeholder = window.matchMedia('(max-width: 640px)').matches
+          ? 'Search updates…'
+          : 'Search updates, categories, or fixes…';
+        document.documentElement.classList.add('modal-open');
+        dialog.showModal();
+        const data = await loadSearchIndex();
+        populateCategories(data);
+        input.value = filterState.query;
+        updateFilterUI();
+        executeSearch();
+        setTimeout(() => input.focus(), 50);
+      }
+
+      function closeModal() {
+        dialog.close();
+        document.documentElement.classList.remove('modal-open');
+        toggleFilterShelf(false);
+        // Return focus to the trigger when the browser didn't restore it.
+        if (document.activeElement === document.body) {
+          openBtn?.focus({ preventScroll: true });
+        }
+      }
+
+      openBtn?.addEventListener('click', openModal);
+      closeBtn?.addEventListener('click', closeModal);
+
+      // Clean removal of modal-open on native close event
+      dialog.addEventListener('close', () => {
+        document.documentElement.classList.remove('modal-open');
+        toggleFilterShelf(false);
+      });
+
+      // Light-dismiss when clicking backdrop
+      dialog.addEventListener('click', (e) => {
+        const rect = dialog.getBoundingClientRect();
+        const isInDialog = (
+          rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+          rect.left <= e.clientX && e.clientX <= rect.left + rect.width
+        );
+        if (!isInDialog) {
+          closeModal();
+        }
+      });
+
+      // Keyboard shortcuts: Cmd+K / Ctrl+K / '/'
+      window.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          if (dialog.open) {
+            closeModal();
+          } else {
+            openModal();
+          }
+        }
+        if (e.key === '/' && !dialog.open && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          openModal();
+        }
+      });
+
+      // Escape key handles closing filter shelf first if open
+      dialog.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (modalContainer && modalContainer.classList.contains('filter-open')) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleFilterShelf(false);
+          } else {
+            // Handle it ourselves: in a type="search" input, the browser's
+            // default for Escape is to clear the text, so the dialog would
+            // otherwise need two presses to close.
+            e.preventDefault();
+            closeModal();
+          }
+        }
+      });
+
+      // Search input changes
+      input.addEventListener('input', (e) => {
+        filterState.query = e.target.value.trim();
+        executeSearch();
+      });
+
+      // Result navigation with keyboard
+      input.addEventListener('keydown', (e) => {
+        const items = resultsList.querySelectorAll('.search-result-item');
+        if (items.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectedIndex = (selectedIndex + 1) % items.length;
+          updateSelection(items);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+          updateSelection(items);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (selectedIndex >= 0 && selectedIndex < items.length) {
+            items[selectedIndex].click();
+          } else if (input.value.trim()) {
+            items[0].click();
+          }
+        }
+      });
+
+      function updateSelection(items) {
+        items.forEach((item, idx) => {
+          if (idx === selectedIndex) {
+            item.classList.add('selected');
+            item.scrollIntoView({ block: 'nearest' });
+          } else {
+            item.classList.remove('selected');
+          }
+        });
+      }
+
+      function highlightText(text, tokens) {
+        if (!text) return '';
+        if (!tokens || tokens.length === 0) return text;
+        const escaped = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const regex = new RegExp(`(${escaped})`, 'gi');
+        return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+      }
+
+      // Date filter. Compares ISO dates (YYYY-MM-DD) as strings, in local time.
+      function isoDay(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      function matchesDateFilter(item) {
+        const range = filterState.dateRange;
+        if (range === 'all') return true;
+        const today = new Date();
+        if (range === 'today') return item.isoDate === isoDay(today);
+        if (range === 'week') {
+          const weekAgo = new Date(today);
+          weekAgo.setDate(today.getDate() - 6);
+          return item.isoDate >= isoDay(weekAgo) && item.isoDate <= isoDay(today);
+        }
+        if (range === 'month') return item.isoDate.slice(0, 7) === isoDay(today).slice(0, 7);
+        if (range === 'custom') {
+          if (filterState.customFrom && item.isoDate < filterState.customFrom) return false;
+          if (filterState.customTo && item.isoDate > filterState.customTo) return false;
+        }
+        return true;
+      }
+
+      async function executeSearch() {
+        selectedIndex = -1;
+        const data = await loadSearchIndex();
+        if (!data || data.length === 0) return;
+
+        const query = filterState.query;
+        const activeFilterCount = getActiveFilterCount();
+        const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+        // Filter updates
+        const filtered = data.filter((item) => {
+          // 1. Text Query Filter
+          if (tokens.length > 0) {
+            const searchable = [
+              item.title,
+              item.summary,
+              item.fullDate,
+              item.shortDate,
+              ...item.categories,
+              item.content
+            ].join(' ').toLowerCase();
+
+            const matchesTokens = tokens.every(token => searchable.includes(token));
+            if (!matchesTokens) return false;
+          }
+
+          // 2. Category Filter (Union / OR rule)
+          if (filterState.categories.size > 0) {
+            const hasAnyCategory = Array.from(filterState.categories).some(cat => item.categories.includes(cat));
+            if (!hasAnyCategory) return false;
+          }
+
+          // 3. Date Filter
+          if (!matchesDateFilter(item)) return false;
+
+          // 4. Section Type Filter (AND: item must contain all checked sections)
+          if (filterState.sections.size > 0) {
+            for (const sec of filterState.sections) {
+              if (!item.sections.includes(sec)) return false;
+            }
+          }
+
+          return true;
+        });
+
+        // UI Rendering
+        if (filtered.length === 0) {
+          emptyPrompt.style.display = 'none';
+          noResults.style.display = 'flex';
+          emptyClearBtn.style.display = activeFilterCount > 0 ? 'inline-block' : 'none';
+          resultsList.innerHTML = '';
+          return;
+        }
+
+        noResults.style.display = 'none';
+        emptyPrompt.style.display = 'none';
+
+        resultsList.innerHTML = filtered.map((item, idx) => {
+          const highlightedTitle = highlightText(item.title, tokens);
+
+          // Snippet: a matching named fix if the query hits one, else the summary.
+          let snippetText = item.summary;
+          if (tokens.length > 0) {
+            const matchingFix = item.fixes.find(fix => tokens.some(t => fix.toLowerCase().includes(t)));
+            if (matchingFix) snippetText = `Fix: ${matchingFix} — ${item.summary}`;
+          }
+
+          const highlightedSnippet = highlightText(snippetText, tokens);
+
+          // Fixed category presentation: separate badge capsules with clean spacing
+          const tagsHtml = item.categories.slice(0, 3).map(cat => `<span class="result-tag-badge">${cat}</span>`).join('');
+          const commitBadge = `<span class="result-commits">${item.commitCount} commits</span>`;
+
+          return `
+            <a href="${baseUrl}/updates/${item.slug}" class="search-result-item">
+              <div class="result-meta-row">
+                <span class="result-date">${item.fullDate}</span>
+                ${tagsHtml ? `<div class="result-tags-wrap">${tagsHtml}</div>` : ''}
+                ${commitBadge}
+              </div>
+              <div class="result-title">${highlightedTitle}</div>
+              <div class="result-snippet">${highlightedSnippet}</div>
+            </a>
+          `;
+        }).join('');
+
+        // Nothing is pre-highlighted; arrow keys start the selection.
+        selectedIndex = -1;
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSearch);
+    } else {
+      initSearch();
+    }
+  })();
+</script>

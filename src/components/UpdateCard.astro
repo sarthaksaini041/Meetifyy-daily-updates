@@ -1,0 +1,180 @@
+---
+import type { Update } from '@/lib/updates';
+
+interface Props {
+  update: Update;
+}
+
+const { update } = Astro.props;
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<article
+  class="update-card glass"
+  id={`update-${update.slug.replace(/\//g, '-')}`}
+  data-update-slug={update.slug}
+>
+  <a
+    href={`${baseUrl}/updates/${update.slug}`}
+    class="card-link"
+    data-astro-prefetch="viewport"
+    aria-label={`${update.formattedDate}: ${update.title}`}
+  >
+    <div class="card-inner">
+      <div class="card-meta">
+        <time class="card-date-heading" datetime={update.isoDate}>{update.formattedDate}</time>
+        <span class="card-commits">{update.commits.length} commits</span>
+      </div>
+
+      <h2 class="card-title">{update.title}</h2>
+
+      <div class="card-tags" aria-label="Categories">
+        {update.categories.map((category) => (
+          <span class="card-tag">{category}</span>
+        ))}
+      </div>
+
+      <p class="card-desc">{update.summary}</p>
+    </div>
+  </a>
+</article>
+
+<style>
+  .update-card {
+    --glass-fill: var(--glass-fill-card);
+    --glass-radius: 20px;
+    position: relative;
+    scroll-margin-top: calc(var(--header-height) + 1.25rem);
+    border-radius: var(--glass-radius);
+    transition: transform var(--transition-fast);
+    overflow: hidden;
+  }
+
+  .update-card:active {
+    transform: scale(0.993);
+  }
+
+  .card-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    height: 100%;
+    min-height: unset;
+    min-width: unset;
+  }
+
+  .card-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 1.5rem 1.85rem 1.55rem;
+  }
+
+  /* ── Meta ───────────────────────────────── */
+  .card-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .card-commits {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .card-date-heading {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-brand);
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+  }
+
+  /* ── Title ──────────────────────────────── */
+  .card-title {
+    font-size: 1.22rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--color-text-primary);
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  /* ── Proper Tag Chips ───────────────────── */
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.05rem 0 0.15rem;
+  }
+
+  .card-tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.73rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.015em;
+    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.62);
+    border: none;
+    padding: 0.25rem 0.55rem;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 1px 2px rgba(13, 17, 23, 0.02);
+    transition:
+      color var(--transition-fast),
+      background-color var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  /* ── Description ────────────────────────── */
+  .card-desc {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    line-height: 1.62;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── Responsive ─────────────────────────── */
+  @media (max-width: 640px) {
+    .update-card {
+      --glass-radius: 16px;
+    }
+    .card-inner {
+      padding: 1.25rem 1.35rem 1.3rem;
+      gap: 0.5rem;
+    }
+    .card-date-heading {
+      font-size: 0.75rem;
+    }
+    .card-tag {
+      font-size: 0.7rem;
+      padding: 0.22rem 0.5rem;
+    }
+    .card-desc {
+      font-size: 0.875rem;
+      line-height: 1.55;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .card-inner {
+      padding: 1.1rem 1.15rem 1.15rem;
+    }
+    .card-tag {
+      font-size: 0.68rem;
+      padding: 0.2rem 0.45rem;
+    }
+  }
+</style>

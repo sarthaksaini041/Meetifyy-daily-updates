@@ -1,0 +1,25 @@
+---
+import { getAllUpdates, type Update } from '@/lib/updates';
+import DocLayout from '@/layouts/DocLayout.astro';
+import { render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const updates = await getAllUpdates();
+
+  return updates.map((update) => ({
+    params: { slug: update.slug },
+    props: { update }
+  }));
+}
+
+interface Props {
+  update: Update;
+}
+
+const { update } = Astro.props;
+const { Content } = await render(update.entry);
+---
+
+<DocLayout update={update}>
+  <Content />
+</DocLayout>

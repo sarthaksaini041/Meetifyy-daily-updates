@@ -1,0 +1,423 @@
+---
+import { getGroupedUpdates } from '@/lib/updates';
+
+interface Props {
+  currentSlug?: string;
+  className?: string;
+}
+
+const { currentSlug, className = '' } = Astro.props;
+const yearGroups = await getGroupedUpdates();
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+// "All Updates" only makes sense away from the main updates page.
+const homePath = `${baseUrl}/`;
+const currentPath = Astro.url.pathname.endsWith('/') ? Astro.url.pathname : `${Astro.url.pathname}/`;
+const showAllUpdatesLink = currentPath !== homePath;
+
+const initialActiveSlug = currentSlug || '';
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+---
+
+<div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" aria-hidden="true"></div>
+
+<aside id="doc-sidebar" data-scroll-clip class={`doc-sidebar glass ${className}`} aria-label="Engineering Updates Navigation">
+  {showAllUpdatesLink && (
+    <a href={`${baseUrl}/`} data-astro-prefetch="viewport" class="sidebar-back-link" id="sidebar-all-updates-btn">
+      <svg class="return-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      <span>All Updates</span>
+    </a>
+  )}
+
+  <div class="sidebar-header">
+    <span class="sidebar-heading">Engineering Updates</span>
+  </div>
+
+  <nav class="sidebar-nav" aria-label="Updates by date">
+    {yearGroups.map((yg) => (
+      <div class="year-group">
+        {yearGroups.length > 1 && <div class="year-label">{yg.year}</div>}
+        {yg.months.map((mg) => (
+          <section class="month-group" aria-label={`${mg.name} ${yg.year}`}>
+            <h3 class="month-name">
+              {mg.name}{yearGroups.length === 1 && <span class="month-year"> {yg.year}</span>}
+            </h3>
+            <ul class="days-list" role="list">
+              {mg.updates.map((update) => {
+                const isActive = initialActiveSlug === update.slug;
+                const d = update.entry.data.date;
+                const weekday = WEEKDAYS[d.getUTCDay()];
+                return (
+                  <li>
+                    <a
+                      href={`${baseUrl}/updates/${update.slug}`}
+                      class={`day-link ${isActive ? 'active' : ''}`}
+                      data-slug={update.slug}
+                      data-astro-prefetch="viewport"
+                      aria-current={isActive ? 'page' : undefined}
+                      aria-label={update.formattedDate}
+                    >
+                      <span class="day-num">{d.getUTCDate()}</span>
+                      <span class="day-weekday">{weekday}</span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
+    ))}
+  </nav>
+</aside>
+
+<style>
+  /* ── Mobile Backdrop ─────────────────────── */
+  /*
+    Open/close is driven by opacity + visibility instead of display, so both
+    directions can animate. Nothing here changes layout, so opening the menu
+    never moves the header or the page.
+  */
+  .mobile-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 21, 40, 0.32);
+    z-index: 52;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 180ms ease,
+      visibility 0s linear 180ms;
+  }
+
+  .mobile-sidebar-backdrop.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      opacity 200ms ease,
+      visibility 0s;
+  }
+
+  /* ── Desktop Floating Boxed Sidebar ──────── */
+  @media (min-width: 1025px) {
+    .mobile-sidebar-backdrop {
+      display: none !important;
+    }
+
+    .doc-sidebar {
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      position: sticky;
+      /* Explicit offset (not scroll-padding, which only some engines apply
+         to sticky elements) so it never slides up under the header. */
+      top: calc(var(--header-offset) + 0.75rem); /* = .doc-layout-container padding-top, so it lines up with the update card */
+      max-height: calc(100vh - var(--header-offset) - 1.5rem);
+      max-height: calc(100dvh - var(--header-offset) - 1.5rem);
+      display: flex;
+      flex-direction: column;
+      --glass-fill: var(--glass-fill-panel);
+      border-radius: 20px;
+      padding: 1.1rem 0.9rem 1rem;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(203, 213, 225, 0.6) transparent;
+      transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast),
+        box-shadow var(--transition-normal);
+    }
+  }
+
+  /* ── Mobile Dropdown Menu (Triggered by Header Icon) ── */
+  @media (max-width: 1024px) {
+    .doc-sidebar {
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: calc(var(--header-offset) + 0.5rem);
+      left: 50%;
+      width: min(360px, calc(100% - 1.5rem));
+      max-height: calc(80vh - var(--header-offset));
+      max-height: calc(80dvh - var(--header-offset));
+      /* Sits over page content: densest level, stronger blur, raised. */
+      --glass-fill: var(--glass-fill-overlay);
+      border-radius: 20px;
+      box-shadow: var(--glass-highlight), var(--glass-shadow-raised);
+      padding: 1.1rem 0.9rem 1rem;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(203, 213, 225, 0.6) transparent;
+      z-index: 55;
+      transform-origin: top center;
+
+      /* Closed state */
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translate(-50%, -8px) scale(0.98);
+      transition:
+        opacity 140ms ease-in,
+        transform 160ms ease-in,
+        visibility 0s linear 160ms;
+    }
+
+    .doc-sidebar.mobile-open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translate(-50%, 0) scale(1);
+      transition:
+        opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s;
+    }
+  }
+
+  .doc-sidebar.no-transition,
+  .mobile-sidebar-backdrop.no-transition {
+    transition: none !important;
+  }
+
+  .doc-sidebar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .doc-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(203, 213, 225, 0.6);
+    border-radius: 4px;
+  }
+  .doc-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* ── Back link (primary action, top) ─────── */
+  .sidebar-back-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: -0.25rem -0.35rem 0.9rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 12px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    background: rgba(255, 255, 255, 0.7);
+    border: none;
+    transition: transform var(--transition-fast);
+  }
+
+  .sidebar-back-link:active {
+    transform: scale(0.98);
+  }
+
+  .return-arrow {
+    color: var(--color-brand);
+    flex-shrink: 0;
+  }
+
+  /* ── Heading ─────────────────────────────── */
+  .sidebar-header {
+    padding: 0 0.35rem 0.6rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid rgba(13, 17, 23, 0.07);
+  }
+
+  .sidebar-heading {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--color-text-primary);
+  }
+
+  /* ── Nav ─────────────────────────────────── */
+  .sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .year-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .year-label {
+    padding: 0 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+  }
+
+  .month-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .month-name {
+    font-family: var(--font-sans);
+    padding: 0.5rem 0.35rem 0.25rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .month-year {
+    font-weight: 600;
+  }
+
+  .days-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* Day row: number carries the weight, weekday is secondary. */
+  .day-link {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.45rem 0.65rem;
+    border-radius: 10px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    user-select: none;
+    transition: transform var(--transition-fast);
+  }
+
+  .day-link:active {
+    transform: scale(0.98);
+  }
+
+  .day-num {
+    min-width: 1.35rem;
+    font-size: 0.92rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+  }
+
+  .day-weekday {
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  .day-link.active {
+    background: rgba(79, 103, 245, 0.14);
+  }
+
+  .day-link.active .day-num,
+  .day-link.active .day-weekday {
+    color: var(--color-brand);
+  }
+</style>
+
+<script>
+  // Listeners on window must be torn down between client-side navigations,
+  // otherwise every visited page adds another copy.
+  let pageListeners: AbortController | null = null;
+
+  function setupSidebarInteractions() {
+    pageListeners?.abort();
+    pageListeners = new AbortController();
+    const { signal } = pageListeners;
+
+    const sidebar = document.getElementById('doc-sidebar');
+    const backdrop = document.getElementById('mobile-sidebar-backdrop');
+    const toggleBtn = document.getElementById('mobile-nav-toggle');
+    // The header persists across navigations, so reset its state each time.
+    toggleBtn?.setAttribute('aria-expanded', 'false');
+    document.documentElement.classList.remove('menu-open');
+    if (!sidebar) return;
+    toggleBtn?.setAttribute('aria-controls', 'doc-sidebar');
+
+    // Mobile Dropdown Open/Close. No scroll lock is needed: the backdrop and
+    // menu are fixed and cover the page, so touches and wheel events never
+    // reach the scroll container underneath. Avoiding overflow changes is
+    // what keeps the header and page from shifting.
+    function openMobileSidebar() {
+      sidebar?.classList.add('mobile-open');
+      backdrop?.classList.add('active');
+      toggleBtn?.setAttribute('aria-expanded', 'true');
+      document.documentElement.classList.add('menu-open');
+      // Move keyboard focus into the menu (it's visible immediately; the
+      // fade is opacity-only).
+      sidebar?.querySelector<HTMLElement>('.day-link.active, .day-link')?.focus({ preventScroll: true });
+    }
+
+    // Used when a menu link navigates: hide the menu in the same frame so the
+    // page transition snapshot doesn't capture it mid-fade (and the fade
+    // doesn't compete with the transition for frames).
+    function closeMobileSidebarInstantly() {
+      sidebar?.classList.add('no-transition');
+      backdrop?.classList.add('no-transition');
+      closeMobileSidebar();
+    }
+
+    function closeMobileSidebar() {
+      sidebar?.classList.remove('mobile-open');
+      backdrop?.classList.remove('active');
+      toggleBtn?.setAttribute('aria-expanded', 'false');
+      document.documentElement.classList.remove('menu-open');
+    }
+
+    function toggleMobileSidebar() {
+      if (sidebar?.classList.contains('mobile-open')) {
+        closeMobileSidebar();
+      } else {
+        openMobileSidebar();
+      }
+    }
+
+    if (toggleBtn) {
+      toggleBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleMobileSidebar();
+      };
+    }
+
+    if (backdrop) {
+      backdrop.onclick = () => {
+        closeMobileSidebar();
+      };
+    }
+
+    // Close on Escape key
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sidebar?.classList.contains('mobile-open')) {
+        closeMobileSidebar();
+        toggleBtn?.focus();
+      }
+    }, { signal });
+
+    // Close when resized back to desktop
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 1024 && sidebar?.classList.contains('mobile-open')) {
+        closeMobileSidebar();
+      }
+    }, { signal });
+
+    // Menu links navigate via the client router; hide the menu first.
+    sidebar.querySelectorAll<HTMLAnchorElement>('.day-link, #sidebar-all-updates-btn').forEach((link) => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 1024) {
+          closeMobileSidebarInstantly();
+        }
+      });
+    });
+  }
+
+  setupSidebarInteractions();
+  document.addEventListener('astro:after-swap', setupSidebarInteractions);
+</script>

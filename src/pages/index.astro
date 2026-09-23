@@ -1,0 +1,67 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import UpdateCard from '@/components/UpdateCard.astro';
+import { getAllUpdates } from '@/lib/updates';
+
+const updates = await getAllUpdates();
+---
+
+<BaseLayout
+  title="Meetifyy · Daily Updates"
+  description="A chronological record of Meetifyy's development, technical improvements, fixes, and engineering progress."
+>
+  <div class="homepage-layout-container">
+    <h1 class="sr-only">Meetifyy Daily Updates</h1>
+
+    <!-- Main Updates Feed: Full available width without sidebar -->
+    <section class="journal-feed" data-scroll-clip aria-label="Daily Engineering Updates">
+      <div class="journal-feed-list">
+        {updates.map((update) => <UpdateCard update={update} />)}
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .homepage-layout-container {
+    max-width: var(--layout-max-width);
+    width: 100%;
+    margin: 0 auto;
+    padding: 0.85rem 1.75rem 4rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* ── Full-Width Feed ────────────────────── */
+  .journal-feed {
+    width: 100%;
+    max-width: 980px;
+    --scroll-clip-radius: 20px; /* = .update-card radius */
+  }
+
+  .journal-feed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+    width: 100%;
+  }
+
+  /* ── Responsive Breakpoints ─────────────── */
+  @media (max-width: 1024px) {
+    .homepage-layout-container {
+      padding: 0.6rem 1.5rem 3.5rem;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .homepage-layout-container {
+      padding: 0.6rem 1rem 3rem;
+    }
+    .journal-feed {
+      --scroll-clip-radius: 16px;
+    }
+    .journal-feed-list {
+      gap: 0.85rem;
+    }
+  }
+</style>

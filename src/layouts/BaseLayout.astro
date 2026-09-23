@@ -1,0 +1,728 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import Header from '@/components/Header.astro';
+import SearchModal from '@/components/SearchModal.astro';
+import '@/styles/global.css';
+// Fonts ship with the build (npm: @fontsource-variable/*): Vite copies the
+// files into /_astro with hashed, base-path-aware URLs.
+import sansUrl from '@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2?url';
+import displayUrl from '@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2?url';
+import geistMonoUrl from '@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'Meetifyy · Daily Updates',
+  description = "A chronological record of Meetifyy's development, technical improvements, fixes, and engineering progress."
+} = Astro.props;
+
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy.github.io');
+---
+
+<!doctype html>
+<html lang="en" data-base={baseUrl}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl.href} />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href={`${baseUrl}/favicon.svg`} />
+
+    <!-- Open Graph / Meta -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl.href} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:site_name" content="Meetifyy Daily Updates" />
+
+    <!--
+      Background image: preloaded at high priority, one size per breakpoint.
+      The `media` attributes mirror the breakpoint in the inline style below so
+      each device downloads only the file it will actually paint.
+    -->
+    <link
+      rel="preload"
+      href={`${baseUrl}/assets/site-bg-2560.webp`}
+      as="image"
+      type="image/webp"
+      media="(min-width: 769px)"
+      fetchpriority="high"
+    />
+    <link
+      rel="preload"
+      href={`${baseUrl}/assets/site-bg-1600.webp`}
+      as="image"
+      type="image/webp"
+      media="(max-width: 768px)"
+      fetchpriority="high"
+    />
+
+    <!-- Fonts: preloaded so they are normally ready before first paint. -->
+    <link rel="preload" href={sansUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href={displayUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href={geistMonoUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+
+    <!--
+      Critical styles, inlined so they apply on the very first frame.
+
+      Fonts: font-display: swap (not optional). "optional" meant a page whose
+      font missed the ~100ms window kept the fallback for that whole view,
+      and the next client-side navigation then rendered in the real font:
+      the text visibly changed between pages. With swap + preload the font
+      is almost always ready at first paint, and when it isn't, the
+      "fallback faces (local Georgia / Arial / Courier New resized to each font's
+      metrics) make the swap happen without text reflowing.
+      Pairing: Fraunces (display: titles and headings) + Plus Jakarta Sans
+      (text) + Geist Mono (code).
+    -->
+    <style is:inline set:html={`
+      @font-face {
+        font-family: 'Plus Jakarta Sans';
+        font-style: normal;
+        font-weight: 200 800;
+        font-display: swap;
+        src: url('${sansUrl}') format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Geist Mono';
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+        src: url('${geistMonoUrl}') format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Fraunces';
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+        src: url('${displayUrl}') format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Fraunces Fallback';
+        src: local('Georgia'), local('Times New Roman'), local('Liberation Serif');
+        size-adjust: 114.4%;
+        ascent-override: 85.7%;
+        descent-override: 22.7%;
+        line-gap-override: 0%;
+      }
+      @font-face {
+        font-family: 'Sans Fallback';
+        src: local('Arial'), local('Liberation Sans'), local('Helvetica');
+        size-adjust: 103.97%;
+        ascent-override: 99.1%;
+        descent-override: 22.1%;
+        line-gap-override: 0%;
+      }
+      @font-face {
+        font-family: 'Geist Mono Fallback';
+        src: local('Courier New'), local('Liberation Mono'), local('Menlo');
+        size-adjust: 100%;
+        ascent-override: 101%;
+        descent-override: 30%;
+        line-gap-override: 0%;
+      }
+      :root {
+        --color-bg: #f7f8fb;
+        --color-text-primary: #0d1117;
+        --header-height: 64px;
+        --site-bg-color: #6aa1df; /* sky average + the 10% wash */
+        --site-bg-placeholder: url('data:image/webp;base64,UklGRoIAAABXRUJQVlA4IHYAAADQBACdASoYABAAPrVKoEonJCMhsAgA4BaJagCdMoRwIr/S/4Dx/0mWt9+1BAHwgAD+uR3t4v8Zc9KoSCdcJ0FZQbJfYOFr/5L/bht0XKdv/CtbGvNHz4x9lNzR8EneBXGMEkSFJkR8NTFknX+z7Tt0fOyq0gAA');
+        --site-bg-image: url('${baseUrl}/assets/site-bg-2560.webp');
+      }
+      @media (max-width: 768px) {
+        :root { --site-bg-image: url('${baseUrl}/assets/site-bg-1600.webp'); }
+      }
+      html {
+        color: #0d1117;
+      }
+      /*
+        Two layers: the real image on top, a 24x16 inline copy of the same
+        image underneath. The inline copy is part of the HTML, so the first
+        paint already shows the sky instead of a flat colour; the full image
+        simply sharpens it once decoded.
+      */
+      body {
+        background-color: var(--site-bg-color);
+        /* Top layer: a very light white wash so the sky reads slightly
+           translucent / softened rather than full-strength. */
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)),
+          var(--site-bg-image),
+          var(--site-bg-placeholder);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center top;
+      }
+    `}>
+    </style>
+
+    <!-- Astro ClientRouter: client-side navigation, no full-page reload flicker -->
+    <ClientRouter fallback="none" />
+  </head>
+  <body id="top">
+    <!-- Accessible Skip to Content Link -->
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <!-- Top Floating Glass Header -->
+    <Header />
+
+    <!-- Main Content Slot (Dedicated Scroll Container below Header) -->
+    <main class="main-page-wrapper" id="main-content">
+      <slot />
+    </main>
+
+    <!-- Global Client Search Modal -->
+    <SearchModal />
+
+    <script is:inline>
+      /*
+        Smooth wheel scrolling for <main> (the page's scroll container).
+        Wheel/trackpad deltas are accumulated into a target and eased toward
+        with a frame-rate-independent exponential; touch, keyboard and
+        scrollbar dragging stay fully native. Also handles wheel over the
+        floating header, which isn't inside <main>.
+        Skipped for reduced motion, pinch-zoom (ctrl+wheel), horizontal
+        gestures, and anything an inner scroller (menu, code block, table)
+        can still consume in that direction.
+      */
+      (function() {
+        if (window.__smoothWheel) return;
+        window.__smoothWheel = true;
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+        var target = null, raf = 0, last = 0;
+        var TAU = 90; // ms; lower = snappier
+
+        function main() { return document.getElementById('main-content'); }
+
+        function innerCanScroll(el, stop, dy) {
+          for (; el && el !== stop && el !== document.body; el = el.parentElement) {
+            var oy = getComputedStyle(el).overflowY;
+            if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+              if (dy < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1) return true;
+            }
+          }
+          return false;
+        }
+
+        function stop() {
+          target = null;
+          if (raf) cancelAnimationFrame(raf);
+          raf = 0;
+        }
+
+        function step(now) {
+          var m = main();
+          if (!m || target === null) return stop();
+          var dt = Math.min(now - last, 64); last = now;
+          var cur = m.scrollTop;
+          var next = cur + (target - cur) * (1 - Math.exp(-dt / TAU));
+          if (Math.abs(target - next) < 0.5) next = target;
+          // behavior 'instant': main's CSS scroll-behavior is smooth (for
+          // anchor links) and must not animate each frame again.
+          m.scrollTo({ top: next, behavior: 'instant' });
+          if (next === target) return stop();
+          raf = requestAnimationFrame(step);
+        }
+
+        document.addEventListener('wheel', function(e) {
+          var m = main();
+          if (!m || reduce.matches || e.ctrlKey || e.defaultPrevented) return;
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          var html = document.documentElement;
+          if (html.classList.contains('menu-open') || html.classList.contains('modal-open')) return;
+          var t = e.target;
+          var inMain = m.contains(t), inHeader = t.closest && t.closest('.site-header');
+          if (!inMain && !inHeader) return;
+          if (inMain && innerCanScroll(t, m, e.deltaY)) return;
+
+          var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * m.clientHeight : e.deltaY;
+          var max = m.scrollHeight - m.clientHeight;
+          if (target === null) target = m.scrollTop;
+          target = Math.max(0, Math.min(max, target + dy));
+          e.preventDefault();
+          if (!raf) { last = performance.now(); raf = requestAnimationFrame(step); }
+        }, { passive: false });
+
+        // Any other scroll input takes over immediately.
+        ['keydown', 'pointerdown', 'touchstart'].forEach(function(type) {
+          document.addEventListener(type, stop, { passive: true });
+        });
+        document.addEventListener('astro:before-swap', stop);
+      })();
+
+      /*
+        Rounded scroll edge: a static clip-path on <main> shaped like the
+        [data-scroll-clip] columns (same side edges and top radius), a fixed
+        gap below the header, full width below the corner band so shadows
+        and the scrollbar stay visible. Rebuilt only on resize / page swap.
+      */
+      (function() {
+        var GAP = 10;
+        var observer = null;
+
+        function roundedTop(x, y, w, bottom, r) {
+          return 'M' + x + ' ' + bottom + 'V' + (y + r) +
+            'A' + r + ' ' + r + ' 0 0 1 ' + (x + r) + ' ' + y +
+            'H' + (x + w - r) +
+            'A' + r + ' ' + r + ' 0 0 1 ' + (x + w) + ' ' + (y + r) +
+            'V' + bottom + 'Z';
+        }
+
+        function update() {
+          var main = document.getElementById('main-content');
+          if (!main) return;
+          var box = main.getBoundingClientRect();
+          var header = document.querySelector('.header-inner');
+          var top = Math.round((header ? header.getBoundingClientRect().bottom - box.top : 0) + GAP);
+          var w = Math.ceil(box.width), h = Math.ceil(box.height);
+          var band = top, d = [];
+          main.querySelectorAll('[data-scroll-clip]').forEach(function(el) {
+            var cs = getComputedStyle(el);
+            if (cs.display === 'none' || cs.position === 'fixed') return;
+            var r = el.getBoundingClientRect();
+            if (!r.width) return;
+            var radius = parseFloat(cs.getPropertyValue('--glass-radius')) ||
+              parseFloat(cs.getPropertyValue('--scroll-clip-radius')) ||
+              parseFloat(cs.borderTopLeftRadius) || 0;
+            band = Math.max(band, top + radius + 1);
+            d.push({ x: r.left - box.left, w: r.width, r: radius });
+          });
+          if (!d.length) { main.style.clipPath = 'inset(' + top + 'px 0 0 0)'; return; }
+          var path = d.map(function(p) { return roundedTop(p.x, top, p.w, band + 1, p.r); });
+          path.push('M0 ' + band + 'H' + w + 'V' + h + 'H0Z');
+          if (main.offsetWidth > main.clientWidth) {
+            path.push('M' + main.clientWidth + ' ' + top + 'H' + main.offsetWidth + 'V' + h + 'H' + main.clientWidth + 'Z');
+          }
+          main.style.clipPath = 'path("' + path.join('') + '")';
+        }
+
+        function bind() {
+          var main = document.getElementById('main-content');
+          if (observer) observer.disconnect();
+          if (!main || !('ResizeObserver' in window)) return update();
+          observer = new ResizeObserver(update);
+          observer.observe(main);
+          main.querySelectorAll('[data-scroll-clip]').forEach(function(el) { observer.observe(el); });
+          update();
+        }
+
+        bind();
+        document.addEventListener('astro:after-swap', bind);
+      })();
+
+      /*
+        Card ⇄ update page transition + scroll restoration.
+
+        One continuous shared-element morph, run on the live DOM (the
+        router's own swap is instant; see the styles below).
+
+        The moving shape is a single "morph" surface on <html>, outside
+        <body>, so it survives the page swap. It sits at z-index -1: above
+        the sky (which is the canvas background), below all page content.
+        Its position, size, corner radius and fill interpolate in ONE
+        animation from the source element to the destination, so the
+        radius never jumps and the shape is never cut by a narrower box.
+
+        Content is never missing:
+          • The morph carries a copy of the source's visible content (with
+            computed styles inlined, because the source page's CSS leaves on
+            swap). The copy fades out during the first half.
+          • The real destination content is uncovered by a clip-path synced
+            to the morph's shape (same keyframes, same timing) and fades in
+            from 20%, overlapping the copy. No frame is empty.
+          • The destination hides only its own background while the morph
+            stands in for it; the final morph frame matches it exactly, so
+            the handover is invisible.
+
+          open:  card (copy) → swap → grows into the update box.
+          back:  update box (copy of what's on screen) → swap, list scroll
+                 restored → shrinks into the same card. If that card is off
+                 screen, the morph fades instead of flying to it.
+      */
+      (function() {
+        if (window.__pageMorph) return;
+        window.__pageMorph = true;
+
+        var KEY = 'mfx-scroll:';
+        var EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+        var DURATION = 480;
+        var EXIT = 140;
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+        var nav = { type: 'push', from: '' };
+        var pending = null;
+        var morphEl = null;
+
+        // Properties copied onto the content copy so it renders identically
+        // after its stylesheet is gone.
+        var PROPS = ['display', 'flex-direction', 'flex-wrap', 'align-items', 'justify-content', 'gap',
+          'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+          'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+          'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+          'font-variant-numeric', 'text-align', 'text-wrap', 'white-space', 'word-break', 'color',
+          'background-color', 'border-top', 'border-right', 'border-bottom', 'border-left',
+          'border-radius', 'box-shadow', 'list-style-type', 'list-style-position',
+          'overflow', 'text-overflow', '-webkit-line-clamp', '-webkit-box-orient', 'opacity',
+          'width', 'min-width', 'max-width', 'height', 'box-sizing', 'vertical-align'];
+
+        function main() { return document.getElementById('main-content'); }
+        function edge() {
+          var h = document.querySelector('.header-inner');
+          return h ? h.getBoundingClientRect().bottom + 10 : 0;
+        }
+        function isListPath(p) { return p.replace(/\/$/, '') === (document.documentElement.dataset.base || ''); }
+        // Visible part of an element (below the scroll edge). `extend`
+        // lets it continue past the viewport bottom, so a morph never shows
+        // rounded lower corners at the screen edge that the real element
+        // (which continues off screen) doesn't have: that mismatch was a
+        // visible snap when a lower card finished closing.
+        function visibleRect(el, extend) {
+          var r = el.getBoundingClientRect();
+          var top = Math.max(r.top, edge());
+          var bottom = Math.min(r.bottom, window.innerHeight + (extend || 0));
+          return { x: r.left, y: top, w: r.width, h: Math.max(0, bottom - top) };
+        }
+        // A card's real box, cut only at the top scroll edge (where <main>'s
+        // rounded clip cuts it too). Never cut at the viewport bottom: the
+        // morph must end exactly where the real card is, even if part of it
+        // is off screen, or the handover snaps.
+        function cardRect(el) {
+          var r = el.getBoundingClientRect();
+          var top = Math.max(r.top, edge());
+          return { x: r.left, y: top, w: r.width, h: Math.max(0, r.bottom - top), top: r.top };
+        }
+        function isVisible(el) { return visibleRect(el).h > 40; }
+        function surfaceOf(el) {
+          var cs = getComputedStyle(el);
+          return { bg: cs.backgroundColor, radius: parseFloat(cs.borderTopLeftRadius) || 20 };
+        }
+
+        function styledCopy(el) {
+          var copy = el.cloneNode(true);
+          (function walk(src, dst) {
+            if (src.nodeType !== 1) return;
+            var cs = getComputedStyle(src);
+            var css = '';
+            for (var k = 0; k < PROPS.length; k++) css += PROPS[k] + ':' + cs.getPropertyValue(PROPS[k]) + ';';
+            dst.setAttribute('style', css);
+            dst.removeAttribute('id');
+            for (var n = 0; n < src.childNodes.length; n++) walk(src.childNodes[n], dst.childNodes[n]);
+          })(el, copy);
+          return copy;
+        }
+        // Copies of `blocks`, positioned exactly where they are on screen,
+        // relative to rect r.
+        function contentLayer(blocks, r) {
+          var layer = document.createElement('div');
+          layer.className = 'page-morph-content';
+          blocks.forEach(function(b) {
+            var br = b.getBoundingClientRect();
+            var c = styledCopy(b);
+            c.style.position = 'absolute';
+            c.style.left = (br.left - r.x) + 'px';
+            c.style.top = (br.top - r.y) + 'px';
+            c.style.width = br.width + 'px';
+            c.style.margin = '0';
+            layer.appendChild(c);
+          });
+          return layer;
+        }
+
+        function frame(r, surf) {
+          return {
+            transform: 'translate(' + r.x + 'px,' + r.y + 'px)',
+            width: r.w + 'px',
+            height: r.h + 'px',
+            borderRadius: surf.radius + 'px',
+            backgroundColor: surf.bg
+          };
+        }
+        function createMorph(r, surf, layer) {
+          removeMorph();
+          morphEl = document.createElement('div');
+          morphEl.className = 'page-morph';
+          Object.assign(morphEl.style, frame(r, surf));
+          if (layer) morphEl.appendChild(layer);
+          document.documentElement.appendChild(morphEl);
+        }
+        function removeMorph() {
+          if (morphEl) morphEl.remove();
+          morphEl = null;
+        }
+        // clip-path on `el` that traces rect r (viewport coords) with radius.
+        function clipFor(el, r, radius) {
+          var b = el.getBoundingClientRect();
+          return 'inset(' + (r.y - b.top) + 'px ' + (b.right - (r.x + r.w)) + 'px ' +
+            (b.bottom - (r.y + r.h)) + 'px ' + (r.x - b.left) + 'px round ' + radius + 'px)';
+        }
+        function anim(el, frames, opts) {
+          return el.animate(frames, Object.assign({ duration: DURATION, easing: EASE, fill: 'forwards' }, opts))
+            .finished.catch(function() {});
+        }
+        function fade(els, from, to, duration, delay) {
+          return Promise.all(els.filter(Boolean).map(function(el) {
+            return anim(el, [{ opacity: from }, { opacity: to }], { duration: duration, delay: delay || 0, easing: 'linear' });
+          }));
+        }
+        function reset(els) {
+          els.forEach(function(el) {
+            if (!el) return;
+            el.getAnimations().forEach(function(a) { a.cancel(); });
+            el.style.opacity = '';
+            el.style.visibility = '';
+            el.style.background = '';
+            el.style.boxShadow = '';
+          });
+        }
+        function hideSurface(el) {
+          el.style.background = 'transparent';
+          el.style.boxShadow = 'none';
+        }
+
+        // The shared morph: shape from→to, source copy out, destination in.
+        function run(from, to, dest, destContent) {
+          var shape = anim(morphEl, [frame(from.r, from.surf), frame(to.r, to.surf)]);
+          var copy = morphEl.firstChild;
+          if (copy) fade([copy], 1, 0, DURATION * 0.5);
+          hideSurface(dest);
+          anim(dest, [{ clipPath: clipFor(dest, from.r, from.surf.radius) }, { clipPath: clipFor(dest, to.r, to.surf.radius) }]);
+          destContent.forEach(function(el) { el.style.opacity = '0'; });
+          fade(destContent, 0, 1, DURATION * 0.8, DURATION * 0.2);
+          return shape.then(function() {
+            reset([dest].concat(destContent));
+            removeMorph();
+          });
+        }
+
+        function scrollMainTo(y) {
+          var m = main();
+          if (m) m.scrollTo({ top: y, behavior: 'instant' });
+        }
+
+        // 1. Remember which card was clicked (only that one animates).
+        document.addEventListener('click', function(e) {
+          pending = null;
+          var link = e.target.closest && e.target.closest('.card-link');
+          if (!link || reduce.matches || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          var card = link.closest('.update-card');
+          if (card && isVisible(card)) pending = { kind: 'open', card: card };
+        }, true);
+
+        // 2. Before the swap: save scroll, hand the source over to the morph.
+        document.addEventListener('astro:before-preparation', function(e) {
+          // e.from, not location: on back/forward the URL has already changed.
+          nav.type = e.navigationType;
+          nav.from = e.from.pathname;
+          var m = main();
+          try { if (m) sessionStorage.setItem(KEY + nav.from, String(Math.round(m.scrollTop))); } catch (err) {}
+
+          var wrapper = document.querySelector('.doc-reading-wrapper');
+          if (!reduce.matches && wrapper && isListPath(e.to.pathname) && isVisible(wrapper)) {
+            pending = { kind: 'back', wrapper: wrapper };
+          }
+          if (!pending || (pending.kind === 'open' && e.to.pathname.indexOf('/updates/') === -1)) {
+            pending = null;
+            return;
+          }
+
+          var p = pending, load = e.loader;
+          e.loader = function() {
+            var exit;
+            if (p.kind === 'open') {
+              var card = p.card;
+              p.from = { r: cardRect(card), surf: surfaceOf(card) };
+              createMorph(p.from.r, p.from.surf, contentLayer([card.querySelector('.card-inner')], p.from.r));
+              card.style.visibility = 'hidden'; // the morph is its exact stand-in
+              var others = Array.prototype.filter.call(document.querySelectorAll('.update-card'), function(c) { return c !== card; });
+              exit = fade(others, 1, 0, EXIT);
+            } else {
+              var w = p.wrapper;
+              p.from = { r: visibleRect(w, 80), surf: surfaceOf(w) };
+              var article = w.querySelector('.markdown-body');
+              var blocks = Array.prototype.slice.call(w.children).filter(function(c) { return c !== article; })
+                .concat(article ? Array.prototype.slice.call(article.children) : [])
+                .filter(function(b) {
+                  var br = b.getBoundingClientRect();
+                  return br.bottom > p.from.r.y && br.top < window.innerHeight && br.height > 0;
+                });
+              createMorph(p.from.r, p.from.surf, contentLayer(blocks, p.from.r));
+              w.style.visibility = 'hidden';
+              exit = fade([document.querySelector('.doc-sidebar')], 1, 0, EXIT);
+            }
+            return Promise.all([load(), exit]);
+          };
+        });
+
+        // 3. After the swap (new DOM, before it is painted).
+        document.addEventListener('astro:after-swap', function() {
+          var path = location.pathname;
+          var saved = null;
+          try { saved = sessionStorage.getItem(KEY + path); } catch (err) {}
+          var fromUpdate = nav.from.indexOf('/updates/') !== -1;
+          // Back/forward restores position; so does returning to the list
+          // from an update ("All Updates", logo). Everything else starts at top.
+          var restore = saved !== null && (nav.type === 'traverse' || (fromUpdate && isListPath(path)));
+          scrollMainTo(restore ? Number(saved) : 0);
+
+          var p = pending;
+          pending = null;
+          if (!p || !morphEl) { removeMorph(); return; }
+
+          if (p.kind === 'open') {
+            var wrapper = document.querySelector('.doc-reading-wrapper');
+            if (!wrapper) return removeMorph();
+            var sidebar = document.querySelector('.doc-sidebar');
+            if (sidebar) {
+              sidebar.style.opacity = '0';
+              fade([sidebar], 0, 1, DURATION * 0.6, DURATION * 0.3).then(function() { reset([sidebar]); });
+            }
+            run(p.from, { r: visibleRect(wrapper, 80), surf: surfaceOf(wrapper) },
+              wrapper, Array.prototype.slice.call(wrapper.children));
+          } else {
+            var slug = (nav.from.split('/updates/')[1] || '').replace(/\/$/, '');
+            var card = document.querySelector('.update-card[data-update-slug="' + slug + '"]');
+            var others = Array.prototype.filter.call(document.querySelectorAll('.update-card'), function(c) { return c !== card; });
+            others.forEach(function(c) { c.style.opacity = '0'; });
+            fade(others, 0, 1, DURATION * 0.6, DURATION * 0.3).then(function() { reset(others); });
+            if (card && isVisible(card)) {
+              // The card's slot stays empty; the shrinking morph carries a
+              // copy of the card's content (pinned to its top-left, so it
+              // travels with the shape) and lands exactly in the slot, where
+              // the real card takes over with no visible change.
+              var to = { r: cardRect(card), surf: surfaceOf(card) };
+              var inner = card.querySelector('.card-inner');
+              var ir = inner.getBoundingClientRect();
+              var cardCopy = styledCopy(inner);
+              cardCopy.style.position = 'absolute';
+              cardCopy.style.left = (ir.left - to.r.x) + 'px';
+              cardCopy.style.top = (ir.top - to.r.y) + 'px';
+              cardCopy.style.width = ir.width + 'px';
+              cardCopy.style.margin = '0';
+              cardCopy.style.opacity = '0';
+              var pageCopy = morphEl.firstChild;
+              morphEl.appendChild(cardCopy);
+              card.style.visibility = 'hidden';
+              if (pageCopy) fade([pageCopy], 1, 0, DURATION * 0.45);
+              fade([cardCopy], 0, 1, DURATION * 0.5, DURATION * 0.25);
+              anim(morphEl, [frame(p.from.r, p.from.surf), frame(to.r, to.surf)]).then(function() {
+                reset([card]);
+                removeMorph();
+              });
+            } else {
+              // Card is off screen: fade the morph out rather than fly to it.
+              if (card) { card.style.opacity = '0'; fade([card], 0, 1, DURATION * 0.6, DURATION * 0.3).then(function() { reset([card]); }); }
+              fade([morphEl], 1, 0, DURATION * 0.6).then(removeMorph);
+            }
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
+
+<style>
+  /*
+    <main> is the page's scroll container. It spans the whole viewport (the
+    header floats over it) and carries a static clip-path so content scrolls
+    away under a rounded edge a fixed gap below the header (script below).
+    <main> is transparent; the background is painted once, by <body>.
+
+    No backdrop-filter anywhere on the site: inside this clipped, composited
+    scroller it produced horizontal bands and scroll flicker.
+  */
+  .main-page-wrapper {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* none, not contain: stops macOS/iOS elastic bounce, which moved the
+       whole page while the sticky sidebar stayed put. */
+    overscroll-behavior-y: none;
+    scrollbar-gutter: stable;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+  }
+
+  /* Space for the floating header. A spacer element rather than
+     padding-top: sticky offsets are measured inside the scroll container's
+     padding in some engines and from the scrollport edge in others, so
+     padding made the sticky sidebar land in different places. */
+  .main-page-wrapper::before {
+    content: '';
+    display: block;
+    height: var(--header-offset);
+  }
+
+  .main-page-wrapper::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .main-page-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .main-page-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 9999px;
+  }
+
+  .main-page-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.55);
+  }
+</style>
+
+<!-- Global transition animation override -->
+<style is:global>
+  /*
+    Page transitions.
+
+    Astro's ClientRouter still does the fetching and DOM swap, but the swap
+    itself is instant: only the root is captured (as one image of the whole
+    page, blur included) and it is not animated.
+
+    Why no named view-transition elements: the browser captures a named
+    element in isolation, without the content behind it, which made
+    translucent surfaces change appearance mid-transition and snap back
+    (flicker), and snapshots of the full-height update page were huge to
+    morph. The motion runs on the live DOM instead (script above).
+  */
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  /* Shared-element morph surface (see the transition script). z-index -1
+     in the root stacking context: above the canvas (sky), below all page
+     content, so the real destination content is revealed on top of it. */
+  .page-morph {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    transform-origin: 0 0;
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+    /* No will-change: a permanently promoted layer rasterises its text
+       (the card copy, tag chips) with different anti-aliasing than the real
+       card, which read as a small snap at the handover. */
+  }
+
+  .page-morph-content {
+    position: absolute;
+    inset: 0;
+  }
+</style>

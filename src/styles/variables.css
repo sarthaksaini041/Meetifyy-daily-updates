@@ -1,0 +1,117 @@
+:root {
+  /* ─── Backgrounds ───────────────────────────────────── */
+  /* Warm off-white base, not cold grey */
+  --color-bg: #f7f8fb;
+  --color-bg-subtle: #f0f2f7;
+  --color-surface: #ffffff;
+  --color-surface-hover: #fafbfd;
+  --color-surface-raised: #ffffff;
+
+  /* ─── Typography Colors ─────────────────────────────── */
+  --color-text-primary: #0d1117;
+  --color-text-secondary: #363d4a;  /* darkened for translucent surfaces */
+  --color-text-muted: #525b6b;
+  --color-text-faint: #9aa3b2;
+
+  /* ─── Borders ───────────────────────────────────────── */
+  --color-border: #e4e8ef;
+  --color-border-subtle: #edf0f5;
+  --color-border-strong: #c8cfdc;
+
+  /* ─── Brand Accent (blue-violet) ───────────────────── */
+  --color-brand: #4f67f5;
+  --color-brand-hover: #3a52e8;
+  --color-brand-light: #eef0fe;
+  --color-brand-muted: #c7cffe;
+
+  /* ─── Semantic Callout Colors ───────────────────────── */
+  --color-issue-bg: #fff1f2;
+  --color-issue-border: #fecdd3;
+  --color-issue-accent: #e11d48;
+  --color-issue-text: #9f1239;
+
+  --color-findings-bg: #f5f3ff;
+  --color-findings-border: #ddd6fe;
+  --color-findings-accent: #6d28d9;
+  --color-findings-text: #5b21b6;
+
+  --color-testing-bg: #ecfdf5;
+  --color-testing-border: #a7f3d0;
+  --color-testing-accent: #059669;
+  --color-testing-text: #065f46;
+
+  --color-improvements-bg: #eff6ff;
+  --color-improvements-border: #bfdbfe;
+  --color-improvements-accent: #2563eb;
+  --color-improvements-text: #1d4ed8;
+
+
+  /* ─── Typography ────────────────────────────────────── */
+  --font-sans: 'Plus Jakarta Sans', 'Sans Fallback', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Display serif for titles and headings. */
+  --font-display: 'Fraunces', 'Fraunces Fallback', Georgia, 'Times New Roman', serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', 'SF Mono', Consolas, Menlo,
+    monospace;
+
+  /* ─── Shadows ───────────────────────────────────────── */
+  /* More present, multi-layer — inspired by reference card depth */
+  --shadow-subtle: 0 1px 2px rgba(13, 17, 23, 0.04);
+  --shadow-card: 0 1px 3px rgba(13, 17, 23, 0.04),
+    0 2px 8px rgba(13, 17, 23, 0.04);
+  --shadow-card-hover: 0 4px 20px -2px rgba(13, 17, 23, 0.08),
+    0 2px 6px rgba(13, 17, 23, 0.04);
+  --shadow-modal: 0 8px 30px -4px rgba(13, 17, 23, 0.14),
+    0 4px 10px rgba(13, 17, 23, 0.06);
+  --shadow-dropdown: 0 4px 16px rgba(13, 17, 23, 0.1),
+    0 1px 4px rgba(13, 17, 23, 0.06);
+  --shadow-inner: inset 0 1px 3px rgba(13, 17, 23, 0.06);
+
+  /* ─── Glass Surface System ──────────────────────────── */
+  /* One material, a few densities. Lower levels let more of the sky
+     through; surfaces carrying long-form text or sitting on top of other
+     content are denser so text stays comfortably readable. */
+  /* No backdrop-filter anywhere: the blur caused scroll flicker and
+     transition artifacts. Surfaces are plain translucent fills. */
+
+  --glass-fill-chrome: rgba(255, 255, 255, 0.46);   /* header */
+  --glass-fill-card: rgba(255, 255, 255, 0.5);      /* update cards, tag hero */
+  --glass-fill-panel: rgba(255, 255, 255, 0.68);    /* desktop sidebar */
+  --glass-fill-reading: rgba(255, 255, 255, 0.72);  /* opened update */
+  --glass-fill-overlay: rgba(255, 255, 255, 0.96);  /* mobile menu, search: sit over text, must hide it */
+
+  /* Borderless: edges come from the fill, the shadow and a soft top light
+     catch, not an outline. */
+  --glass-border: none;
+  --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+  --glass-shadow:
+    0 1px 2px rgba(13, 30, 70, 0.05),
+    0 10px 28px -12px rgba(13, 30, 70, 0.22);
+  --glass-shadow-raised:
+    0 2px 6px rgba(13, 30, 70, 0.06),
+    0 24px 56px -16px rgba(13, 30, 70, 0.32);
+
+  /* Site background tokens live in BaseLayout's inline <style>, which knows
+     the deploy base path. Defining them here would override those values
+     with a path that 404s under a non-root BASE_PATH. */
+
+  /* ─── Layout Dimensions ─────────────────────────────── */
+  --header-height: 64px;
+  --sidebar-width: 240px;
+  --content-max-width: 820px;
+  --layout-max-width: 1200px;
+
+  /* ─── Border Radii ──────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* ─── Transitions ───────────────────────────────────── */
+  --transition-fast: 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}

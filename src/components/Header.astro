@@ -1,0 +1,289 @@
+---
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<header class="site-header" transition:persist="site-header">
+  <div class="header-inner glass">
+    <!-- Brand: Icon only on left side -->
+    <div class="brand-group">
+      <a href={`${baseUrl}/`} class="brand-link" aria-label="Meetifyy Home">
+        <svg class="brand-logo-icon" width="30" height="30" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect width="32" height="32" rx="10" fill="#0d1117"/>
+          <path d="M9 22V10L16 16.5L23 10V22" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+
+    <!-- Right Side: Search Bar & Actions -->
+    <div class="header-right">
+      <button
+        type="button"
+        class="search-trigger-btn"
+        id="open-search-btn"
+        aria-label="Search updates"
+        aria-keyshortcuts="Control+k Meta+k"
+      >
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <span class="search-text">Search updates…</span>
+      </button>
+
+      <!--
+        Always rendered: the header is persisted across client-side
+        navigations, so it cannot depend on per-page props. CSS shows it only
+        when the current page has a sidebar.
+      -->
+      <button
+          type="button"
+          class="header-menu-btn"
+          id="mobile-nav-toggle"
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+        >
+          <svg class="menu-icon-bars" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="4" y1="7" x2="20" y2="7"></line>
+            <line x1="4" y1="12" x2="20" y2="12"></line>
+            <line x1="4" y1="17" x2="20" y2="17"></line>
+          </svg>
+          <svg class="menu-icon-close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+    </div>
+  </div>
+</header>
+
+<style>
+  /* ── Floating Header Shell ──────────────── */
+  /* Floats over <main>, which runs underneath it to the top of the viewport.
+     --header-offset is the header's total height at each breakpoint. */
+  :global(:root) {
+    --header-offset: calc(0.55rem + 56px + 0.25rem);
+  }
+
+  .site-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    width: 100%;
+    pointer-events: none;
+    padding: 0.55rem 1.5rem 0.25rem;
+    background: transparent;
+    isolation: isolate;
+  }
+
+  /* ── Floating Glass Capsule (Matches Update Card Material) ─ */
+  .header-inner {
+    --glass-fill: var(--glass-fill-chrome);
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: var(--layout-max-width);
+    margin: 0 auto;
+    height: 56px;
+    padding: 0 0.7rem 0 1.4rem;
+    border-radius: var(--radius-full);
+    gap: 1rem;
+  }
+
+  /* ── Brand (Icon Only on Left) ─────────── */
+  .brand-group {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .brand-link {
+    display: flex;
+    align-items: center;
+    border-radius: 10px;
+    transition: transform var(--transition-fast), opacity var(--transition-fast);
+  }
+
+  .brand-link:active {
+    transform: scale(0.96);
+  }
+
+  .brand-logo-icon {
+    display: block;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(13, 17, 23, 0.12);
+  }
+
+  /* ── Right Actions & Search Bar ─────────── */
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-left: auto;
+  }
+
+  .search-trigger-btn {
+    width: 200px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0 0.85rem 0 0.8rem;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.65);
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 0.81rem;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 1px 0 rgba(13, 17, 23, 0.03),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.7);
+    transition:
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      background-color var(--transition-fast),
+      box-shadow var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .search-trigger-btn:active {
+    transform: scale(0.985);
+    background: rgba(240, 242, 247, 0.85);
+  }
+
+  .search-icon {
+    flex-shrink: 0;
+    color: var(--color-text-faint);
+    transition: color var(--transition-fast);
+  }
+
+  .search-text {
+    flex: 1;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Mobile Menu Toggle Button ──────────── */
+  .header-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.65);
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 1px 0 rgba(13, 17, 23, 0.02),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.7);
+    transition:
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      background-color var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .header-menu-btn:active {
+    transform: scale(0.95);
+  }
+
+  .header-menu-btn .menu-icon-close {
+    display: none;
+  }
+
+  .header-menu-btn[aria-expanded="true"] .menu-icon-bars {
+    display: none;
+  }
+
+  .header-menu-btn[aria-expanded="true"] .menu-icon-close {
+    display: block;
+  }
+
+  .header-menu-btn[aria-expanded="true"] {
+    background: var(--color-brand-light);
+    border-color: var(--color-brand-muted);
+    color: var(--color-brand);
+  }
+
+  /* ── Responsive ─────────────────────────── */
+  @media (max-width: 1024px) {
+    :global(:root) {
+      --header-offset: calc(0.35rem + 52px);
+    }
+    .site-header {
+      padding: 0.35rem 1rem 0;
+    }
+    .header-inner {
+      height: 52px;
+      padding: 0 0.6rem 0 1.15rem;
+      gap: 0.75rem;
+    }
+    :global(html:has(#doc-sidebar)) .header-menu-btn {
+      display: inline-flex;
+    }
+    .search-trigger-btn {
+      width: 180px;
+      height: 34px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    :global(:root) {
+      --header-offset: calc(0.3rem + 48px);
+    }
+    .site-header {
+      padding: 0.3rem 0.75rem 0;
+    }
+    .header-inner {
+      height: 48px;
+      padding: 0 0.45rem 0 0.95rem;
+      gap: 0.5rem;
+    }
+    .header-right {
+      flex: 1;
+      justify-content: flex-end;
+      gap: 0.45rem;
+      min-width: 0;
+    }
+    /* Icon-only search button on phones */
+    .search-trigger-btn {
+      flex: 0 0 auto;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      justify-content: center;
+    }
+    .search-trigger-btn .search-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--color-text-secondary);
+    }
+    .search-text {
+      display: none;
+    }
+    .header-menu-btn {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+    }
+  }
+
+  @media (max-width: 360px) {
+    :global(:root) {
+      --header-offset: calc(0.25rem + 48px);
+    }
+    .site-header {
+      padding: 0.25rem 0.5rem 0;
+    }
+    .header-inner {
+      padding: 0 0.4rem 0 0.8rem;
+    }
+  }
+</style>

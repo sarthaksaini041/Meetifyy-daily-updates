@@ -1,0 +1,497 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Sidebar from '@/components/Sidebar.astro';
+import { getAdjacentUpdates, slugifyCategory, type Update } from '@/lib/updates';
+import '@/styles/markdown.css';
+
+interface Props {
+  update: Update;
+}
+
+const { update } = Astro.props;
+const { newer, older } = await getAdjacentUpdates(update.slug);
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+const pageTitle = `${update.title} — ${update.formattedDate} | Meetifyy Daily Updates`;
+---
+
+<BaseLayout
+  title={pageTitle}
+  description={update.summary}
+>
+  <div class="doc-layout-container">
+    <!-- Desktop Sticky Sidebar -->
+    <Sidebar currentSlug={update.slug} className="desktop-sidebar-only" />
+
+    <!-- Main Reading Rail -->
+    <section class="doc-content-rail" aria-label="Journal Content">
+      <div class="doc-reading-wrapper glass" data-scroll-clip>
+        <!-- Journal Header -->
+        <header class="journal-hero-header">
+          <div class="journal-header-top">
+            <time datetime={update.isoDate} class="journal-date-chip">
+              {update.formattedDate}
+            </time>
+            <a href="#commit-log" class="journal-commit-count">{update.commits.length} commits</a>
+          </div>
+
+          <h1 class="journal-main-title">{update.title}</h1>
+
+          <p class="journal-focus-summary">{update.summary}</p>
+
+          <ul class="journal-categories" aria-label="Categories">
+            {update.categories.map((category) => (
+              <li>
+                <a href={`${baseUrl}/tags/${slugifyCategory(category)}`} class="journal-category">{category}</a>
+              </li>
+            ))}
+          </ul>
+        </header>
+
+        <div class="journal-header-divider" role="separator" aria-hidden="true"></div>
+
+        <!-- Rendered Markdown -->
+        <article class="markdown-body" id="journal-article-body">
+          <slot />
+        </article>
+
+        <!-- Commit log: every commit of the day, from the frontmatter -->
+        <section class="commit-log" id="commit-log" aria-labelledby="commit-log-title">
+          <h2 id="commit-log-title" class="commit-log-title">
+            Commit log <span class="commit-log-count">{update.commits.length}</span>
+          </h2>
+          <ol class="commit-log-list">
+            {update.commits.map((commit) => (
+              <li class="commit-log-item">
+                <time class="commit-time">{commit.time}</time>
+                <code class="commit-sha">{commit.sha}</code>
+                <span class="commit-message">{commit.message}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <!-- Sequential Navigation -->
+        <nav class="sequential-nav" aria-label="Sequential Journal Navigation">
+          <div class="nav-direction nav-prev">
+            {older && (
+              <a href={`${baseUrl}/updates/${older.slug}`} class="seq-link seq-prev-link" data-astro-prefetch="viewport">
+                <span class="seq-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span>
+                <span class="seq-text">
+                  <span class="seq-dir-label">Previous</span>
+                  <span class="seq-title">{older.formattedDate}</span>
+                </span>
+              </a>
+            )}
+          </div>
+
+          <div class="nav-direction nav-next">
+            {newer && (
+              <a href={`${baseUrl}/updates/${newer.slug}`} class="seq-link seq-next-link" data-astro-prefetch="viewport">
+                <span class="seq-text">
+                  <span class="seq-dir-label">Next</span>
+                  <span class="seq-title">{newer.formattedDate}</span>
+                </span>
+                <span class="seq-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
+              </a>
+            )}
+          </div>
+        </nav>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .doc-layout-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 2.25rem;
+    width: 100%;
+    max-width: var(--layout-max-width);
+    margin: 0 auto;
+    padding: 0.75rem 1.75rem 4rem;
+    /* Use dynamic viewport height — accounts for mobile browser chrome */
+    min-height: calc(100vh - var(--header-offset)); /* fallback */
+    min-height: calc(100dvh - var(--header-offset));
+  }
+
+  .doc-content-rail {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .doc-reading-wrapper {
+    max-width: var(--content-max-width);
+    margin: 0 auto;
+    /* Densest glass level: carries long-form text. */
+    --glass-fill: var(--glass-fill-reading);
+    --glass-radius: var(--radius-2xl);
+    border-radius: var(--glass-radius);
+    padding: 3rem 3.5rem 3.75rem;
+  }
+
+  /* ── Journal Header ──────────────────────── */
+  .journal-hero-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .journal-header-top {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .journal-date-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    color: var(--color-brand);
+    background: var(--color-brand-light);
+    border: 1px solid var(--color-brand-muted);
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-full);
+  }
+
+  .journal-main-title {
+    font-size: 2.2rem;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: var(--color-text-primary);
+    text-wrap: balance;
+  }
+
+  .journal-focus-summary {
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    margin-top: 0.1rem;
+  }
+
+  .journal-commit-count {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .journal-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    list-style: none;
+    margin-top: 0.35rem;
+  }
+
+  .journal-category {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.65rem;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.7);
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  /* ── Commit log ──────────────────────────── */
+  .commit-log {
+    margin-top: 3rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--color-border);
+    scroll-margin-top: calc(var(--header-offset) + 1rem);
+  }
+
+  .commit-log-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+  }
+
+  .commit-log-count {
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--radius-full);
+    background: var(--color-brand-light);
+    color: var(--color-brand);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .commit-log-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .commit-log-item {
+    display: grid;
+    grid-template-columns: 3rem 4.6rem 1fr;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+
+  .commit-log-item:last-child {
+    border-bottom: none;
+  }
+
+  .commit-time {
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .commit-sha {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--color-brand);
+  }
+
+  .commit-message {
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  .journal-header-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: 0 0 2.5rem;
+  }
+
+  /* ── Sequential Navigation ───────────────── */
+  .sequential-nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 2.5rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .nav-direction {
+    flex: 1;
+  }
+
+  .nav-next {
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .seq-link {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    max-width: 280px;
+    padding: 0.8rem 1rem;
+    border-radius: var(--radius-2xl);
+    border: none;
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow:
+      0 1px 2px rgba(13, 30, 70, 0.06),
+      0 6px 18px -8px rgba(13, 30, 70, 0.18);
+    transition: transform var(--transition-fast);
+  }
+
+  .seq-link:active {
+    transform: scale(0.985);
+  }
+
+  .seq-next-link {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .seq-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--color-brand-light);
+    color: var(--color-brand);
+  }
+
+  .seq-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .seq-dir-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-brand);
+  }
+
+  .seq-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--color-text-primary);
+  }
+
+  /* ── Responsive ─────────────────────────── */
+  @media (max-width: 1024px) {
+    .doc-layout-container {
+      padding: 0.6rem 1.25rem 3.5rem;
+      justify-content: center;
+      width: 100%;
+    }
+    .doc-content-rail {
+      width: 100%;
+      flex: 1;
+      min-width: 0;
+    }
+    .doc-reading-wrapper {
+      max-width: var(--content-max-width);
+      width: 100%;
+      padding: 2.25rem 1.75rem 3rem;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .doc-layout-container {
+      padding: 0.6rem 0.85rem 3rem;
+    }
+    .doc-content-rail {
+      width: 100%;
+      padding: 0;
+    }
+    .doc-reading-wrapper {
+      width: 100%;
+      padding: 1.6rem 1.25rem 2.25rem;
+      --glass-radius: 18px;
+    }
+    .journal-main-title {
+      font-size: 1.6rem;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+    .journal-focus-summary {
+      font-size: 0.92rem;
+    }
+    .sequential-nav {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .nav-next {
+      justify-content: flex-start;
+    }
+    .seq-link {
+      max-width: 100%;
+    }
+    /* Stacked full-width on phones: text left, arrow at the far edge. */
+    .seq-next-link {
+      justify-content: space-between;
+      text-align: left;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .commit-log-item {
+      grid-template-columns: 2.6rem 1fr;
+      gap: 0.15rem 0.6rem;
+    }
+    .commit-message {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .doc-layout-container {
+      padding: 0.6rem 0.65rem 2.5rem;
+    }
+    .doc-reading-wrapper {
+      padding: 1.35rem 1rem 2rem;
+      --glass-radius: 16px;
+    }
+    .journal-main-title {
+      font-size: 1.45rem;
+    }
+  }
+</style>
+
+<script>
+  function addCopyButtons() {
+    const article = document.getElementById('journal-article-body');
+    if (!article) return;
+
+    // Section callouts and table wrappers are added at build time
+    // (src/lib/rehype-journal.mjs) so nothing shifts after first paint.
+
+    // Copy button goes on the build-time .code-block wrapper, not inside
+    // the <pre>: the <pre> scrolls sideways and would carry the button along.
+    article.querySelectorAll<HTMLElement>('.code-block').forEach((block) => {
+      const pre = block.querySelector('pre');
+      if (!pre || block.querySelector('.code-copy-btn')) return;
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'code-copy-btn';
+      copyBtn.setAttribute('aria-label', 'Copy code to clipboard');
+      copyBtn.innerHTML = `<span>Copy</span>`;
+
+      copyBtn.addEventListener('click', async () => {
+        const code = pre.querySelector('code')?.innerText || pre.innerText;
+        try {
+          await navigator.clipboard.writeText(code);
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => {
+            copyBtn.innerHTML = '<span>Copy</span>';
+          }, 2000);
+        } catch (e) {
+          console.error('Failed to copy code: ', e);
+        }
+      });
+
+      block.appendChild(copyBtn);
+    });
+  }
+
+  addCopyButtons();
+  document.addEventListener('astro:after-swap', addCopyButtons);
+</script>
+
+<style is:global>
+  .code-copy-btn {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.7rem;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background-color var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .code-copy-btn:active {
+    transform: scale(0.95);
+  }
+</style>
