@@ -33,7 +33,22 @@ const pageTitle = `${update.title} — ${update.formattedDate} | Daily Updates`;
             <time datetime={update.isoDate} class="journal-date-chip">
               {update.formattedDate}
             </time>
-            <a href="#commit-log" class="journal-commit-count">{update.commits.length} commits</a>
+            <div class="journal-header-actions">
+              <a href="#commit-log" class="journal-commit-count">{update.commits.length} commits</a>
+              <a
+                href={`${baseUrl}/pdf/meetifyy-update-${update.isoDate}.pdf`}
+                download={`meetifyy-update-${update.isoDate}.pdf`}
+                class="journal-pdf-download"
+                data-astro-reload
+                aria-label={`Download the ${update.formattedDate} report as PDF`}
+              >
+                <span class="pdf-icon" aria-hidden="true">
+                  <svg class="pdf-icon-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><polyline points="7 10 12 15 17 10"></polyline><path d="M5 21h14"></path></svg>
+                  <span class="pdf-icon-spinner"></span>
+                </span>
+                PDF
+              </a>
+            </div>
           </div>
 
           <h1 class="journal-main-title">{update.title}</h1>
@@ -179,6 +194,74 @@ const pageTitle = `${update.title} — ${update.formattedDate} | Daily Updates`;
     font-weight: 500; /* = .card-commits, so it travels unchanged */
     color: var(--color-text-muted);
     font-variant-numeric: tabular-nums;
+  }
+
+  .journal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .journal-pdf-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  /* The spinner swaps in over the arrow in the same 14px box, so the
+     button keeps its exact size while the PDF downloads. */
+  .pdf-icon {
+    position: relative;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .pdf-icon-arrow {
+    display: block;
+  }
+
+  .pdf-icon-spinner {
+    position: absolute;
+    inset: 1px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    opacity: 0;
+  }
+
+  .journal-pdf-download[aria-busy='true'] {
+    cursor: progress;
+    color: var(--color-brand);
+    border-color: var(--color-brand-muted);
+  }
+
+  .journal-pdf-download[aria-busy='true'] .pdf-icon-arrow {
+    visibility: hidden;
+  }
+
+  .journal-pdf-download[aria-busy='true'] .pdf-icon-spinner {
+    opacity: 1;
+    animation: pdf-spin 0.7s linear infinite;
+  }
+
+  @keyframes pdf-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .journal-pdf-download:hover {
+    color: var(--color-brand);
+    border-color: var(--color-brand-muted);
   }
 
   .journal-categories {
@@ -464,6 +547,35 @@ const pageTitle = `${update.title} — ${update.formattedDate} | Daily Updates`;
 
   addCopyButtons();
   document.addEventListener('astro:after-swap', addCopyButtons);
+
+  // PDF download: fetch the file ourselves so the button can show a spinner
+  // until it has arrived, then hand it to the browser as a normal download.
+  // Delegated on document, so it survives client-side page swaps.
+  document.addEventListener('click', async (event) => {
+    const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('.journal-pdf-download');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    if (link.getAttribute('aria-busy') === 'true') return;
+
+    link.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetch(link.href);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const url = URL.createObjectURL(await response.blob());
+      const temp = document.createElement('a');
+      temp.href = url;
+      temp.download = link.getAttribute('download') || 'meetifyy-update.pdf';
+      document.body.appendChild(temp);
+      temp.click();
+      temp.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      console.error('PDF download failed, opening directly: ', e);
+      window.location.href = link.href;
+    } finally {
+      link.removeAttribute('aria-busy');
+    }
+  });
 </script>
 
 <style is:global>

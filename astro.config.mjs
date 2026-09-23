@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import { devPdfRoute } from './scripts/pdf-render.mjs';
 import rehypeJournal from './src/lib/rehype-journal.mjs';
 
 // https://astro.build/config
@@ -18,7 +19,8 @@ export default defineConfig({
     format: 'directory'
   },
   integrations: [
-    sitemap()
+    sitemap(),
+    devPdfRoute()
   ],
   markdown: {
     rehypePlugins: [rehypeJournal],
