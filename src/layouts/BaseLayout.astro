@@ -1427,7 +1427,12 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
     html.vt-sheet .site-header {
       view-transition-name: site-header;
     }
-    html.vt-sheet .doc-reading-wrapper {
+    /* The sheet is the update page's scroll area, not the box inside it: a
+       captured element keeps its own clip but not its ancestors', so the
+       box alone showed text that is scrolled up under the header (above
+       <main>'s rounded scroll edge) over the header while it moved. <main>
+       carries that clip itself and is only as big as the screen. */
+    html.vt-sheet .main-page-wrapper:has(.doc-reading-wrapper) {
       view-transition-name: update-sheet;
     }
     html.vt-sheet::view-transition-group(site-header) {

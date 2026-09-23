@@ -1,20 +1,39 @@
 ---
 /**
- * PuckWizard — decorative walking character on the Updates page.
+ * PuckWizard — interactive character along the bottom of the Updates page.
  *
  * Sprite: "Puck - Wizard" by Mandi Paugh
  * Source: https://opengameart.org/content/puck-wizard (puck-bm.png, 640×480)
  * License: CC-BY 3.0 — Credit: Mandi Paugh / opengameart.org
  *
- * /assets/puck/puck-wizard.png is a 160×56 strip cut unchanged from the
- * original sheet (magenta key → transparent). Five 32×56 cells:
- *   0  stand   (sheet x=0,  y=0)
- *   1  walk A  (sheet x=0,  y=64)  stride
- *   2  walk B  (sheet x=36, y=64)  passing pose (body 1px higher, baked in)
- *   3  walk C  (sheet x=72, y=64)  opposite stride
- *   4  cheer   (sheet x=108, y=64) shown briefly on click
- * The walk is a 3-frame cycle played ping-pong: A B C B. All cells share the
- * same 56px baseline, so the feet stay put. The source faces left.
+ * /assets/puck/puck-wizard.png: ten 64×56 cells cut unchanged from the
+ * original sheet (magenta key → transparent), each placed on the same
+ * baseline (y=56) and centre, so no frame shifts the character:
+ *   0  stand     (sheet 0,0)        5  held/fall (HIT 3, 284,136)
+ *   1  walk A    (0,64)             6  crouch    (WOUNDED 1, 36,136) — landing
+ *   2  walk B    (36,64)            7  hit 1     (HIT 1, 196,136) — impact
+ *   3  walk C    (72,64)            8  hit 2     (HIT 2, 240,136)
+ *   4  cheer     (108,64) — tap     9  swooned   (SWOONED, 108,144) — knocked out
+ *  10  front swing, arm up (36,0)   11  arm forward (72,0)  — idle wave
+ *  12  back swing (108,0)           13  hand behind head (144,0) — idle stretch
+ *  14  cast, arm out (180,0)        15–16  cast wind-up (224,0 / 260,0)
+ *  17  cast, spell release (296,0)  — double-tap
+ *  18  ready (144,64) — brace before a swipe-hop
+ *  19–21  bow (188,64 / 232,64 / 276,64) — greeting on load and after respawn
+ * The walk is the sheet's 3-frame cycle played ping-pong: A B C B.
+ * The source faces left.
+ *
+ * Interactions (pointer events, so mouse, pen and touch alike):
+ *   tap          cheer
+ *   double-tap   cast a spell (sparks from his hand)
+ *   swipe        a quick sideways flick: he braces, then hops that way
+ *   drag         pick him up anywhere; he hangs from the hat and sways with
+ *                the pointer's speed
+ *   release      he falls with gravity (keeping any throw), lands with a
+ *                crouch; from more than 10rem he is hurt, lies knocked out,
+ *                fades and respawns, dropping in from 2.25–2.75rem
+ * touch-action: none is set on the character only, so page scrolling is
+ * untouched everywhere else.
  */
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
 const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
@@ -28,18 +47,19 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
 </div>
 
 <style>
+  /* The ground: the whole bottom edge of the screen. */
   #puck-track {
     --puck-scale: 2;
     position: fixed;
+    left: 16px;
     right: 16px;
     bottom: 0;
-    width: 320px;
     height: calc(56px * var(--puck-scale));
     pointer-events: none;
     z-index: 50;
-    contain: layout size;
   }
 
+  /* The character's hit box: the 32px-wide body, not the wide cell. */
   #puck-wizard {
     position: absolute;
     left: 0;
@@ -48,24 +68,46 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
     height: calc(56px * var(--puck-scale));
     opacity: 0;
     transition: opacity 400ms var(--ease-out);
+    transform-origin: 50% 8%; /* held by the hat */
     will-change: transform;
     pointer-events: auto;
-    cursor: pointer;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 
   #puck-wizard.is-ready {
     opacity: 1;
   }
+  #puck-wizard.is-held {
+    cursor: grabbing;
+  }
+  /* Knocked out → fades away before respawning. */
+  #puck-wizard.is-ready.is-gone {
+    opacity: 0;
+    transition: opacity 320ms var(--ease-in);
+  }
+  /* Respawning: fades in quickly while dropping. */
+  #puck-wizard.is-ready.is-arriving {
+    transition: opacity 180ms var(--ease-out);
+  }
 
+  /* 64px cells centred on the 32px body. */
   .puck-sprite {
-    width: 100%;
+    position: absolute;
+    top: 0;
+    left: -50%;
+    width: 200%;
     height: 100%;
     background-repeat: no-repeat;
-    background-size: 500% 100%;
-    transform-origin: 50% 100%;
+    background-size: 2200% 100%;
     background-position: 0 0;
+    transform-origin: 50% 100%;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+    pointer-events: none;
     /* Frames must swap instantly; the site's global transition would smear them. */
     transition: none;
     /* Source faces left; data-facing="right" mirrors it around its centre. */
@@ -76,12 +118,41 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
     transform: scaleX(-1);
   }
 
-  .puck-sprite[data-frame='1'] { background-position: 25% 0; }
-  .puck-sprite[data-frame='2'] { background-position: 50% 0; }
-  .puck-sprite[data-frame='3'] { background-position: 75% 0; }
-  .puck-sprite[data-frame='4'] { background-position: 100% 0; }
+  /* Knocked out (frame 9): the sheet draws him slightly tilted — hat on the
+     ground, feet 3px above it. Tilt the pose 3.24° about the point where
+     the hat meets the ground (x=5 of the 64px cell), so hat, body and feet
+     all rest on the ground. Written in the sprite's own coordinates, so the
+     mirrored (facing right) pose tilts correctly too. */
+  .puck-sprite[data-frame='9'] {
+    transform: translateX(-42.188%) rotate(3.24deg) translateX(42.188%);
+  }
+  #puck-wizard[data-facing='right'] .puck-sprite[data-frame='9'] {
+    transform: scaleX(-1) translateX(-42.188%) rotate(3.24deg) translateX(42.188%);
+  }
 
-  /* Click: cheer pose + a small hop that lands back on the same baseline. */
+  .puck-sprite[data-frame='1'] { background-position: 4.7619% 0; }
+  .puck-sprite[data-frame='2'] { background-position: 9.5238% 0; }
+  .puck-sprite[data-frame='3'] { background-position: 14.2857% 0; }
+  .puck-sprite[data-frame='4'] { background-position: 19.0476% 0; }
+  .puck-sprite[data-frame='5'] { background-position: 23.8095% 0; }
+  .puck-sprite[data-frame='6'] { background-position: 28.5714% 0; }
+  .puck-sprite[data-frame='7'] { background-position: 33.3333% 0; }
+  .puck-sprite[data-frame='8'] { background-position: 38.0952% 0; }
+  .puck-sprite[data-frame='9'] { background-position: 42.8571% 0; }
+  .puck-sprite[data-frame='10'] { background-position: 47.6190% 0; }
+  .puck-sprite[data-frame='11'] { background-position: 52.3810% 0; }
+  .puck-sprite[data-frame='12'] { background-position: 57.1429% 0; }
+  .puck-sprite[data-frame='13'] { background-position: 61.9048% 0; }
+  .puck-sprite[data-frame='14'] { background-position: 66.6667% 0; }
+  .puck-sprite[data-frame='15'] { background-position: 71.4286% 0; }
+  .puck-sprite[data-frame='16'] { background-position: 76.1905% 0; }
+  .puck-sprite[data-frame='17'] { background-position: 80.9524% 0; }
+  .puck-sprite[data-frame='18'] { background-position: 85.7143% 0; }
+  .puck-sprite[data-frame='19'] { background-position: 90.4762% 0; }
+  .puck-sprite[data-frame='20'] { background-position: 95.2381% 0; }
+  .puck-sprite[data-frame='21'] { background-position: 100.0000% 0; }
+
+  /* Tap: cheer pose + a small hop that lands back on the same baseline. */
   #puck-wizard.is-cheering .puck-sprite {
     animation: puck-hop 520ms cubic-bezier(0.3, 0, 0.3, 1);
   }
@@ -97,7 +168,12 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
     45% { transform: translateY(-10px) scaleX(-1); }
   }
 
-  .puck-spark {
+  /*
+    Effects created by the script (sparks, the spell's bolt and burst) are not
+    in the template, so Astro's scoped styles would never match them: they
+    are styled globally.
+  */
+  :global(.puck-spark) {
     position: absolute;
     left: 50%;
     top: 12%;
@@ -115,16 +191,73 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
     to { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; }
   }
 
+  /* The spell: a glowing bolt (gold core, violet aura, streaking tail)
+     that bursts into a ring of light where it ends. */
+  :global(.puck-bolt) {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff 0 28%, #ffe7a0 42%, rgba(255, 196, 80, 0.55) 62%, rgba(255, 196, 80, 0) 72%);
+    box-shadow:
+      0 0 10px 3px rgba(255, 206, 110, 0.75),
+      0 0 24px 8px rgba(150, 110, 255, 0.35);
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+  :global(.puck-bolt)::after {
+    /* Tail, trailing behind the direction of flight. */
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 50%;
+    width: 38px;
+    height: 5px;
+    margin-top: -2.5px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(255, 214, 120, 0), rgba(255, 226, 150, 0.9));
+    transform-origin: 100% 50%;
+  }
+  :global(.puck-bolt[data-dir='left'])::after {
+    transform: scaleX(-1);
+  }
+  :global(.puck-flash),
+  :global(.puck-burst) {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+  :global(.puck-flash) {
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95), rgba(255, 214, 120, 0.6) 45%, rgba(255, 214, 120, 0) 70%);
+  }
+  :global(.puck-burst) {
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    border: 2px solid rgba(255, 224, 140, 0.95);
+    box-shadow:
+      0 0 12px 2px rgba(255, 206, 110, 0.7),
+      inset 0 0 10px 1px rgba(170, 130, 255, 0.45);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     #puck-wizard.is-cheering .puck-sprite { animation: none; }
-    .puck-spark { display: none; }
+    :global(.puck-spark),
+    :global(.puck-bolt),
+    :global(.puck-flash),
+    :global(.puck-burst) { display: none; }
   }
 
   @media (max-width: 640px) {
     #puck-track {
       --puck-scale: 1.5;
-      right: 8px;
-      width: 220px;
+      left: var(--mobile-gutter);
+      right: var(--mobile-gutter);
     }
   }
 </style>
@@ -135,14 +268,37 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
     // let astro:page-load bring up each new copy of the element.
     if (window.__puckBoot) return;
     window.__puckBoot = true;
+
     // Ping-pong over the 3 walk cells: A B C B.
     var WALK_SEQ = [1, 2, 3, 2];
+    var F = {
+      stand: 0, cheer: 4, held: 5, crouch: 6, hit1: 7, hit2: 8, out: 9,
+      armUp: 10, armOut: 11, stretch1: 12, stretch2: 13,
+      castOut: 14, windUp1: 15, windUp2: 16, spell: 17, ready: 18,
+      bow1: 19, bow2: 20, bow3: 21
+    };
+    // Short acted sequences: [frame, ms] (ms per frame, like the walk's pace).
+    var SEQ = {
+      bow: [[F.bow1, 140], [F.bow2, 140], [F.bow3, 440], [F.bow2, 130], [F.bow1, 130]],
+      wave: [[F.armOut, 150], [F.armUp, 170], [F.armOut, 170], [F.armUp, 170], [F.armOut, 150]],
+      stretch: [[F.stretch1, 170], [F.stretch2, 560], [F.stretch1, 170]],
+      cast: [[F.windUp1, 110], [F.windUp2, 110], [F.castOut, 120], [F.spell, 400, 'sparks'], [F.castOut, 170]]
+    };
     // Travel (in source pixels) per walk frame. The legs move about one source
     // pixel per frame, so the animation is driven by distance travelled — the
     // feet never slide, and frames slow down naturally while easing in/out.
     var STEP_SRC_PX = 1;
     var FRAME_MS = 160;           // frame length at cruising speed
     var ACCEL_MS = 600;           // time to reach cruising speed
+
+    var GRAVITY = 3000;           // px/s²
+    var REM = 16;
+    var HURT_HEIGHT = 10 * REM;   // a fall from higher than this hurts (160px)
+    // A throw carries part of the hand's speed, capped, so even a hard flick
+    // only lofts him a little before gravity wins (~120px at most upward).
+    var THROW = 0.55, THROW_UP_MAX = 850, THROW_SIDE_MAX = 900;
+    var RESPAWN_MIN = 2.25 * REM; // respawn drop: below HURT_HEIGHT, so a
+    var RESPAWN_MAX = 2.75 * REM; // respawn never hurts him again
 
     var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -163,27 +319,37 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
         alive = false;
         listeners.abort();
         clearTimeout(timer);
-        if (rafId !== null) cancelAnimationFrame(rafId);
-        rafId = null;
+        stopLoop();
       }, { signal: signal, once: true });
 
-      var scale, step, vMax, accel, maxX;
+      var scale, step, vMax, accel, maxX, maxY;
       function measure() {
         scale = el.offsetWidth / 32;
         step = STEP_SRC_PX * scale;
         vMax = step / (FRAME_MS / 1000);
         accel = vMax / (ACCEL_MS / 1000);
         maxX = Math.max(0, track.clientWidth - el.offsetWidth);
+        // Ceiling: his top stays a little below the floating header.
+        var header = document.querySelector('.header-inner');
+        var ceiling = header ? header.getBoundingClientRect().bottom + 8 : 8;
+        maxY = Math.max(0, window.innerHeight - el.offsetHeight - ceiling);
       }
       measure();
 
-      // Movement state (plain variables — only the DOM is touched, and only on change).
-      var x = maxX * (0.3 + Math.random() * 0.4);
+      /*
+        State. mode: 'ground' (idle or walking), 'held', 'air', 'hurt'.
+        x: along the ground; y: height above it (up is positive); rot: sway
+        in degrees. Only the DOM transform is written, and only on change.
+      */
+      var mode = 'ground';
+      var x = maxX * (0.3 + Math.random() * 0.4), y = 0, rot = 0;
+      var vx = 0, vy = 0, peak = 0;
       var facing = Math.random() < 0.5 ? -1 : 1;
-      var walking = false;
+      var walking = false, boost = 1;
       var startX = 0, targetX = 0, v = 0;
-      var frame = -1, renderedX = null;
+      var frame = -1, rendered = '';
       var rafId = null, lastT = 0, timer = null;
+      var cheering = false, cheerTimer = null, greet = false, lastTap = 0;
 
       function setFrame(f) {
         if (f === frame) return;
@@ -192,24 +358,18 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
         else sprite.setAttribute('data-frame', String(f));
       }
 
-      function renderX() {
+      function render() {
         // Sub-pixel, GPU-composited translate: continuous motion with no stepping.
-        var px = Math.round(x * 100) / 100;
-        if (px === renderedX) return;
-        renderedX = px;
-        el.style.transform = 'translate3d(' + px + 'px,0,0)';
+        var t = 'translate3d(' + (Math.round(x * 100) / 100) + 'px,' + (Math.round(-y * 100) / 100) + 'px,0)';
+        if (Math.abs(rot) > 0.05) t += ' rotate(' + (Math.round(rot * 100) / 100) + 'deg)';
+        if (t === rendered) return;
+        rendered = t;
+        el.style.transform = t;
       }
 
       function setFacing(f) {
         facing = f;
         el.setAttribute('data-facing', f > 0 ? 'right' : 'left');
-      }
-
-      function stand() {
-        walking = false;
-        v = 0;
-        setFrame(0);
-        schedule(1600 + Math.random() * 2800, startWalk);
       }
 
       function schedule(ms, fn) {
@@ -218,11 +378,62 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
         timer = setTimeout(fn, ms);
       }
 
+      // ── One animation loop for walking, holding and falling ───────────
+      function loop(t) {
+        rafId = null;
+        var dt = Math.min((t - lastT) / 1000, 1 / 30);
+        lastT = t;
+        var more = false;
+        if (mode === 'ground' && walking) more = walkStep(dt);
+        else if (mode === 'held') more = heldStep(dt);
+        else if (mode === 'air') more = airStep(dt);
+        render();
+        if (more) rafId = requestAnimationFrame(loop);
+      }
+      function startLoop() {
+        if (rafId !== null) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(loop);
+      }
+      function stopLoop() {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+
+      // ── Idle and walking ──────────────────────────────────────────────
+      function stand() {
+        mode = 'ground';
+        walking = false;
+        boost = 1;
+        v = 0;
+        setFrame(F.stand);
+        schedule(1600 + Math.random() * 2800, startWalk);
+      }
+
+      // Plays an acted sequence (bow, wave, stretch, cast). Grabbing him
+      // cancels it (the shared timer is cleared).
+      function play(seq, then) {
+        mode = 'act';
+        walking = false;
+        stopLoop();
+        clearTimeout(timer);
+        var i = 0;
+        (function next() {
+          if (i >= seq.length) return then ? then() : stand();
+          var s = seq[i++];
+          setFrame(s[0]);
+          if (s[2] === 'sparks') castSparks();
+          schedule(s[1], next);
+        })();
+      }
+
       // Pick a direction and distance. A turn happens on the stand frame and is
       // held for a beat before the first step, so the flip never pops mid-stride.
+      // Now and then he waves or stretches instead of walking.
       function startWalk() {
-        if (cheering) return;
+        if (cheering || mode !== 'ground') return;
         if (reduceMotion.matches || document.hidden) return schedule(2000, startWalk);
+        if (Math.random() < 0.28) return play(Math.random() < 0.6 ? SEQ.wave : SEQ.stretch);
         measure();
         var dir = facing;
         if (x <= step * 4) dir = 1;
@@ -232,9 +443,9 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
         if (pairsAhead(dir) < 2) return stand();
         if (dir !== facing) {
           setFacing(dir);
-          return schedule(450, beginSteps);
+          return schedule(450, function () { beginSteps(6 + Math.floor(Math.random() * 20), 1); });
         }
-        beginSteps();
+        beginSteps(6 + Math.floor(Math.random() * 20), 1);
       }
 
       // Room ahead in pairs of steps. Walking a whole number of pairs means the
@@ -244,74 +455,333 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
         return Math.floor(room / (step * 2));
       }
 
-      function beginSteps() {
-        var n = Math.min(pairsAhead(facing), 6 + Math.floor(Math.random() * 20));
+      function beginSteps(pairs, speed) {
+        var n = Math.min(pairsAhead(facing), pairs);
         if (n < 1) return stand();
+        clearTimeout(timer);
+        mode = 'ground';
         startX = x;
         targetX = x + facing * n * step * 2;
         walking = true;
+        boost = speed;
         v = 0;
         setFrame(WALK_SEQ[0]);
         startLoop();
       }
 
-      function tick(t) {
-        rafId = null;
-        var dt = Math.min((t - lastT) / 1000, 1 / 20);
-        lastT = t;
-        if (!walking) return;
-
+      function walkStep(dt) {
+        var top = vMax * boost, acc = accel * boost;
         var remaining = Math.abs(targetX - x);
         // Trapezoidal speed: ease in, cruise, then brake to land exactly on target.
-        v = Math.min(vMax, v + accel * dt, Math.sqrt(2 * accel * remaining) + accel * dt * 0.5);
-        var d = Math.max(v, vMax * 0.08) * dt;
-
+        v = Math.min(top, v + acc * dt, Math.sqrt(2 * acc * remaining) + acc * dt * 0.5);
+        var d = Math.max(v, top * 0.08) * dt;
         if (d >= remaining) {
           x = targetX;
-          renderX();
-          return stand();
+          stand();
+          return false;
         }
         x += facing * d;
-
-        var travelled = Math.abs(x - startX);
         // Each step shows the pose it is heading into, so the final step
         // (index 2n) lands on a stride cell right before switching to stand.
-        setFrame(WALK_SEQ[Math.ceil(travelled / step) % WALK_SEQ.length]);
-        renderX();
-        rafId = requestAnimationFrame(tick);
+        setFrame(WALK_SEQ[Math.ceil(Math.abs(x - startX) / step) % WALK_SEQ.length]);
+        return true;
       }
 
-      function startLoop() {
-        if (rafId !== null) return;
-        lastT = performance.now();
-        rafId = requestAnimationFrame(tick);
+      // ── Held: follows the pointer, sways from the hat ─────────────────
+      var grab = null; // pointer bookkeeping
+      function heldStep(dt) {
+        // Sway follows the pointer's horizontal speed (the body trails the
+        // hand), eased so it settles when the hand stops.
+        var target = Math.max(-14, Math.min(14, grab.vx * 0.012));
+        rot += (target - rot) * (1 - Math.exp(-dt * 12));
+        grab.vx *= Math.exp(-dt * 8);
+        return true;
       }
 
-      document.addEventListener('visibilitychange', function () {
-        // rAF pauses in background tabs; restart cleanly without a time jump.
-        if (!document.hidden && walking) {
-          if (rafId !== null) cancelAnimationFrame(rafId);
-          rafId = null;
-          startLoop();
+      // ── Falling ───────────────────────────────────────────────────────
+      function fall(fromVx, fromVy, pose) {
+        mode = 'air';
+        walking = false;
+        clearTimeout(timer);
+        vx = fromVx;
+        vy = fromVy;
+        peak = y;
+        setFrame(pose == null ? F.held : pose);
+        startLoop();
+      }
+
+      function airStep(dt) {
+        vy -= GRAVITY * dt;
+        y += vy * dt;
+        x += vx * dt;
+        vx *= Math.exp(-dt * 1.4); // air drag
+        if (x < 0) { x = 0; vx = -vx * 0.35; }
+        if (x > maxX) { x = maxX; vx = -vx * 0.35; }
+        // Header ceiling: bump off it softly and fall.
+        if (y > maxY) { y = maxY; if (vy > 0) vy = -vy * 0.2; }
+        if (Math.abs(vx) > 40) setFacing(vx > 0 ? 1 : -1);
+        // Sway relaxes towards the direction of travel while falling.
+        var target = Math.max(-10, Math.min(10, vx * 0.01));
+        rot += (target - rot) * (1 - Math.exp(-dt * 8));
+        peak = Math.max(peak, y);
+        if (y <= 0 && vy <= 0) {
+          y = 0;
+          rot = 0;
+          land();
+          return false;
         }
-      }, { signal: signal });
+        return true;
+      }
 
-      window.addEventListener('resize', function () {
+      function land() {
+        vx = vy = 0;
+        if (peak > HURT_HEIGHT) return hurt();
+        // Soft landing: knees bend for a beat, then back on his feet.
+        mode = 'hurt'; // no input-driven walking during the crouch
+        setFrame(F.crouch);
+        schedule(170, function () {
+          // Back from a knock-out: he greets you again.
+          if (greet && !reduceMotion.matches) { greet = false; play(SEQ.bow); }
+          else stand();
+        });
+      }
+
+      // Hard landing: impact frames, lies knocked out, fades, respawns.
+      function hurt() {
+        mode = 'hurt';
+        setFrame(F.hit1);
+        schedule(110, function () {
+          setFrame(F.hit2);
+          schedule(130, function () {
+            setFrame(F.out);
+            schedule(1000, function () {
+              el.classList.add('is-gone');
+              schedule(420, respawn);
+            });
+          });
+        });
+      }
+
+      function respawn() {
         measure();
-        x = Math.min(x, maxX);
-        renderX();
-        // Scale or bounds may have changed; settle and re-plan from here.
-        if (walking) stand();
-      }, { signal: signal });
+        x = Math.random() * maxX;
+        setFacing(Math.random() < 0.5 ? -1 : 1);
+        rot = 0;
+        if (reduceMotion.matches) {
+          y = 0;
+          render();
+          el.classList.remove('is-gone');
+          return stand();
+        }
+        y = RESPAWN_MIN + Math.random() * (RESPAWN_MAX - RESPAWN_MIN);
+        greet = true;
+        render();
+        el.classList.add('is-arriving');
+        el.classList.remove('is-gone');
+        fall(0, 0);
+        schedule(400, function () { el.classList.remove('is-arriving'); });
+      }
 
-      var cheering = false;
-      el.addEventListener('click', function () {
-        if (cheering) return;
+      // ── Pointer input: tap, swipe, drag ───────────────────────────────
+      function sample(e) {
+        var now = performance.now();
+        grab.samples.push({ x: e.clientX, y: e.clientY, t: now });
+        while (grab.samples.length > 2 && now - grab.samples[0].t > 90) grab.samples.shift();
+      }
+      function velocity() {
+        var s = grab.samples, a = s[0], b = s[s.length - 1];
+        var dt = (b.t - a.t) / 1000;
+        if (dt < 0.008) return { x: 0, y: 0 };
+        return { x: (b.x - a.x) / dt, y: (b.y - a.y) / dt };
+      }
+
+      function pickUp() {
+        grab.kind = 'drag';
+        mode = 'held';
+        walking = false;
+        cheering = false;
+        el.classList.remove('is-cheering', 'is-gone', 'is-arriving');
+        clearTimeout(timer);
+        el.classList.add('is-held');
+        setFrame(F.held);
+        grab.vx = 0;
+        startLoop();
+      }
+
+      function moveHeld(e) {
+        var r = grab.trackRect;
+        x = Math.max(0, Math.min(maxX, e.clientX - grab.ox - r.left));
+        var top = e.clientY - grab.oy;
+        y = Math.max(0, Math.min(maxY, window.innerHeight - el.offsetHeight - top));
+        var vel = velocity();
+        grab.vx = vel.x;
+        if (Math.abs(vel.x) > 220) setFacing(vel.x > 0 ? 1 : -1);
+      }
+
+      el.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0 || mode === 'hurt') return;
+        e.preventDefault();
+        measure();
+        var trackRect = track.getBoundingClientRect();
+        grab = {
+          id: e.pointerId, kind: 'pending', t0: performance.now(),
+          x0: e.clientX, y0: e.clientY,
+          // Where on his body he was grabbed (from his current position,
+          // not the rotated box), so picking him up never makes him jump.
+          ox: e.clientX - trackRect.left - x,
+          oy: e.clientY - (window.innerHeight - el.offsetHeight - y),
+          trackRect: trackRect,
+          samples: [], vx: 0
+        };
+        sample(e);
+        try { el.setPointerCapture(e.pointerId); } catch (err) {}
+        if (mode === 'air') pickUp(); // catch him mid-fall
+      });
+
+      el.addEventListener('pointermove', function (e) {
+        if (!grab || e.pointerId !== grab.id) return;
+        sample(e);
+        var dx = e.clientX - grab.x0, dy = e.clientY - grab.y0;
+        var age = performance.now() - grab.t0;
+        if (grab.kind === 'pending' && Math.hypot(dx, dy) > 6) {
+          // A quick, mostly sideways flick on the ground is a swipe; anything
+          // else lifts him.
+          if ((mode === 'ground' || mode === 'act') && age < 200 && Math.abs(dx) > Math.abs(dy) * 1.5) grab.kind = 'swipe';
+          else pickUp();
+        }
+        if (grab.kind === 'swipe' && (age > 320 || Math.abs(dy) > 28)) pickUp(); // a slow "swipe" is a drag
+        if (grab.kind === 'drag') moveHeld(e);
+      });
+
+      function release(e) {
+        if (!grab || e.pointerId !== grab.id) return;
+        sample(e);
+        var g = grab, vel = velocity();
+        grab = null;
+        try { el.releasePointerCapture(e.pointerId); } catch (err) {}
+        if (g.kind === 'pending') {
+          if (e.type !== 'pointerup' || performance.now() - g.t0 >= 400) return;
+          // Tap: cheer. A second tap soon after: cast a spell instead.
+          var now = performance.now();
+          if (now - lastTap < 340) { lastTap = 0; cast(); }
+          else { lastTap = now; cheer(); }
+          return;
+        }
+        if (g.kind === 'swipe') {
+          // A flick sends him springing that way: a low hop (well under the
+          // hurt height) carried by the flick's speed, landing in a crouch.
+          var dx = e.clientX - g.x0;
+          var speed = Math.abs(dx) / Math.max(0.05, (performance.now() - g.t0) / 1000);
+          var dir = dx > 0 ? 1 : -1;
+          var hopVx = dir * Math.max(280, Math.min(720, speed * 0.6));
+          setFacing(dir);
+          stopCheer();
+          // Braces for a beat (Ready), then springs.
+          play([[F.ready, 90]], function () { fall(hopVx, 300, 1); });
+          return;
+        }
+        // Dropped (or thrown): gravity takes over from the hand's velocity.
+        el.classList.remove('is-held');
+        fall(Math.max(-THROW_SIDE_MAX, Math.min(THROW_SIDE_MAX, vel.x * THROW)),
+          Math.max(-THROW_UP_MAX, Math.min(THROW_UP_MAX, -vel.y * THROW)));
+      }
+      el.addEventListener('pointerup', release);
+      el.addEventListener('pointercancel', release);
+      el.addEventListener('lostpointercapture', function (e) {
+        if (grab && e.pointerId === grab.id) release(e);
+      });
+      // The long-press menu on touch devices would interrupt a drag.
+      el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+      function stopCheer() {
+        clearTimeout(cheerTimer);
+        cheering = false;
+        el.classList.remove('is-cheering');
+      }
+
+      function cast() {
+        if (mode !== 'ground' && mode !== 'act') return;
+        stopCheer();
+        play(SEQ.cast);
+      }
+
+      // The spell: a flash at his hand, a bolt flying forward, and a burst
+      // (ring + sparks) where it ends. Positioned in the ground's (track's)
+      // coordinates so it doesn't move with him; transform/opacity only.
+      function effect(cls, left, bottom) {
+        var e = document.createElement('span');
+        e.className = cls;
+        e.style.left = left + 'px';
+        e.style.bottom = bottom + 'px';
+        track.appendChild(e);
+        return e;
+      }
+      function castBolt() {
+        if (reduceMotion.matches) return;
+        var w = el.offsetWidth, h = el.offsetHeight;
+        var handX = facing < 0 ? x - w * 0.14 : x + w * 1.14;
+        var handY = y + h * 0.54;
+        var room = facing < 0 ? handX : track.clientWidth - handX;
+        var d = Math.max(30, Math.min(170, room - 12)) * facing;
+
+        var flash = effect('puck-flash', handX, handY);
+        flash.animate([{ transform: 'scale(0.3)', opacity: 1 }, { transform: 'scale(1.6)', opacity: 0 }],
+          { duration: 260, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }).finished.then(function () { flash.remove(); }, function () { flash.remove(); });
+
+        var bolt = effect('puck-bolt', handX, handY);
+        bolt.setAttribute('data-dir', facing < 0 ? 'left' : 'right');
+        bolt.animate([
+          { transform: 'translate(0, 0) scale(0.4)', opacity: 0 },
+          { transform: 'translate(' + d * 0.08 + 'px, -2px) scale(1)', opacity: 1, offset: 0.12 },
+          { transform: 'translate(' + d + 'px, -5px) scale(1)', opacity: 1 }
+        ], { duration: 420, easing: 'cubic-bezier(0.25, 0.6, 0.35, 1)' }).finished.then(function () {
+          bolt.remove();
+          burst(handX + d, handY + 5);
+        }, function () { bolt.remove(); });
+      }
+      function burst(bx, by) {
+        if (!alive) return;
+        var ring = effect('puck-burst', bx, by);
+        ring.animate([{ transform: 'scale(0.2)', opacity: 1 }, { transform: 'scale(1.7)', opacity: 0 }],
+          { duration: 440, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }).finished.then(function () { ring.remove(); }, function () { ring.remove(); });
+        for (var i = 0; i < 7; i++) {
+          var sp = effect('puck-spark', bx, by);
+          var a = (i / 7) * Math.PI * 2 + Math.random() * 0.6;
+          var r = 16 + Math.random() * 16;
+          sp.style.top = 'auto';
+          sp.style.setProperty('--dx', Math.cos(a) * r + 'px');
+          sp.style.setProperty('--dy', Math.sin(a) * r + 'px');
+          sp.addEventListener('animationend', function () { this.remove(); });
+        }
+      }
+
+      // Sparks leave his casting hand, spraying forward.
+      function castSparks() {
+        if (reduceMotion.matches) return;
+        castBolt();
+        for (var i = 0; i < 4; i++) {
+          var sp = document.createElement('span');
+          var a = (facing < 0 ? Math.PI : 0) + (Math.random() - 0.5) * 1.3;
+          var d = 26 + Math.random() * 26;
+          sp.className = 'puck-spark';
+          sp.style.left = facing < 0 ? '-14%' : '114%';
+          sp.style.top = '46%';
+          sp.style.setProperty('--dx', Math.cos(a) * d + 'px');
+          sp.style.setProperty('--dy', Math.sin(a) * d - 8 + 'px');
+          sp.addEventListener('animationend', function () { this.remove(); });
+          el.appendChild(sp);
+        }
+      }
+
+      function cheer() {
+        if (cheering || (mode !== 'ground' && mode !== 'act')) return;
+        mode = 'ground';
         cheering = true;
         var wasWalking = walking;
         walking = false;
+        stopLoop();
         clearTimeout(timer);
-        setFrame(4);
+        setFrame(F.cheer);
         el.classList.add('is-cheering');
         if (!reduceMotion.matches) {
           for (var i = 0; i < 6; i++) {
@@ -324,19 +794,36 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
             el.appendChild(sp);
           }
         }
-        setTimeout(function () {
+        cheerTimer = setTimeout(function () {
           if (!alive) return;
           el.classList.remove('is-cheering');
           cheering = false;
-          // Resume the interrupted walk from the stand pose.
+          if (mode !== 'ground') return; // picked up meanwhile
           stand();
           if (wasWalking) schedule(500, startWalk);
         }, 700);
-      });
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        // rAF pauses in background tabs; restart cleanly without a time jump.
+        if (!document.hidden && (walking || mode === 'air' || mode === 'held')) {
+          stopLoop();
+          startLoop();
+        }
+      }, { signal: signal });
+
+      window.addEventListener('resize', function () {
+        measure();
+        x = Math.min(x, maxX);
+        y = Math.min(y, maxY);
+        render();
+        // Scale or bounds may have changed; settle and re-plan from here.
+        if (mode === 'ground' && walking) stand();
+      }, { signal: signal });
 
       setFacing(facing);
-      setFrame(0);
-      renderX();
+      setFrame(F.stand);
+      render();
 
       // Preload + decode before showing, so the first frame never flashes blank.
       var img = new Image();
@@ -346,7 +833,12 @@ const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
         .then(function () {
           if (!alive) return;
           el.classList.add('is-ready');
-          schedule(1200, startWalk);
+          // A bow to greet the visitor, then about his day.
+          schedule(700, function () {
+            if (mode !== 'ground' || cheering) return;
+            if (reduceMotion.matches) return stand();
+            play(SEQ.bow);
+          });
         });
     }
 
