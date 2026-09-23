@@ -110,8 +110,30 @@
   --radius-2xl: 20px;
   --radius-full: 9999px;
 
-  /* ─── Transitions ───────────────────────────────────── */
-  --transition-fast: 140ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-normal: 220ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-slow: 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* ─── Motion ────────────────────────────────────────── */
+  /*
+    One motion language for the whole site. Two curves:
+      --ease-out  things arriving, opening, moving and settling. Quick to
+                  respond, long gentle landing. Same curve as the card ⇄
+                  page transition.
+      --ease-in   things leaving. Starts gently, ends quickly, so an exit
+                  never lingers.
+    Durations scale with how far/large the motion is:
+      --duration-micro   press / hover feedback, colour changes
+      --duration-exit    anything closing or fading away
+      --duration-enter   menus, panels, dialogs opening
+      --duration-slow    header/layout pieces that travel with a page change
+    Only opacity and transform are animated (compositor), except where a
+    comment says otherwise.
+  */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-micro: 160ms;
+  --duration-exit: 180ms;
+  --duration-enter: 280ms;
+  --duration-slow: 320ms;
+
+  --transition-fast: var(--duration-micro) var(--ease-out);
+  --transition-normal: 240ms var(--ease-out);
+  --transition-slow: var(--duration-slow) var(--ease-out);
 }

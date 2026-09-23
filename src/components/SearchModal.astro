@@ -196,10 +196,10 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
 
   /* Opening: the reverse of closing — fade in while settling down into place. */
   .search-modal[open]:not(.is-closing) {
-    animation: search-modal-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: search-modal-in var(--duration-enter) var(--ease-out);
   }
   .search-modal[open]:not(.is-closing)::backdrop {
-    animation: search-backdrop-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: search-backdrop-in var(--duration-enter) var(--ease-out);
   }
   @keyframes search-modal-in {
     from { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
@@ -212,11 +212,11 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
 
   /* Closing: fade and drift up slightly, backdrop fades with it. */
   .search-modal.is-closing {
-    animation: search-modal-out 200ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    animation: search-modal-out var(--duration-exit) var(--ease-in) forwards;
     pointer-events: none;
   }
   .search-modal.is-closing::backdrop {
-    animation: search-backdrop-out 200ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    animation: search-backdrop-out var(--duration-exit) var(--ease-in) forwards;
   }
   @keyframes search-modal-out {
     from { opacity: 1; transform: translate(-50%, 0) scale(1); }
@@ -242,10 +242,10 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
      keyframes without translate(-50%) or scale — just a short fade + slide. */
   @media (max-width: 640px) {
     .search-modal[open]:not(.is-closing) {
-      animation: search-modal-in-mobile 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      animation: search-modal-in-mobile var(--duration-enter) var(--ease-out);
     }
     .search-modal.is-closing {
-      animation: search-modal-out-mobile 200ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+      animation: search-modal-out-mobile var(--duration-exit) var(--ease-in) forwards;
     }
     @keyframes search-modal-in-mobile {
       from { opacity: 0; transform: translate3d(0, 12px, 0); }
@@ -464,9 +464,9 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
     pointer-events: none;
     transform: translateY(-8px);
     transition:
-      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      visibility 200ms cubic-bezier(0.16, 1, 0.3, 1);
+      opacity var(--duration-exit) var(--ease-in),
+      transform var(--duration-exit) var(--ease-in),
+      visibility 0s linear var(--duration-exit);
   }
 
   .search-modal-container.filter-open .search-filter-shelf {
@@ -474,6 +474,11 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
     visibility: visible;
     pointer-events: auto;
     transform: translateY(0);
+    /* Visible at once when opening; hidden only after the fade when closing. */
+    transition:
+      opacity var(--duration-enter) var(--ease-out),
+      transform var(--duration-enter) var(--ease-out),
+      visibility 0s;
   }
 
   /* ─── Results Stage (Completely hidden when filters are open) ─── */
@@ -491,9 +496,9 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
     pointer-events: auto;
     transform: translateY(0);
     transition:
-      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      visibility 200ms cubic-bezier(0.16, 1, 0.3, 1);
+      opacity var(--duration-exit) var(--ease-in),
+      transform var(--duration-exit) var(--ease-in),
+      visibility 0s linear var(--duration-exit);
   }
 
   /* When filter view is open: completely hide results so they NEVER peek through and cannot compete for scroll */

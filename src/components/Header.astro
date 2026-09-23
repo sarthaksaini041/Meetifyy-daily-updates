@@ -56,6 +56,26 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
   </div>
 </header>
 
+<script>
+  // The header persists across navigations by being moved into the new
+  // page, and a moved element's styles are recomputed without transitions.
+  // So the menu button's state is a class, changed a frame after the swap:
+  // the header first renders its old state, then transitions to the new one.
+  function syncMenuButton(animate: boolean) {
+    const header = document.querySelector('.site-header');
+    if (!header) return;
+    const apply = () => {
+      header.classList.add('menu-js');
+      header.classList.toggle('has-menu', !!document.getElementById('doc-sidebar'));
+    };
+    if (animate) requestAnimationFrame(() => requestAnimationFrame(apply));
+    else apply();
+  }
+
+  syncMenuButton(false);
+  document.addEventListener('astro:after-swap', () => syncMenuButton(true));
+</script>
+
 <style>
   /* ── Floating Header Shell ──────────────── */
   /* Floats over <main>, which runs underneath it to the top of the viewport.
@@ -239,7 +259,7 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
       --header-offset: calc(0.3rem + 48px);
     }
     .site-header {
-      padding: 0.3rem 0.75rem 0;
+      padding: 0.3rem var(--mobile-gutter) 0;
     }
     .header-inner {
       height: 48px;
@@ -268,10 +288,60 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
     .search-text {
       display: none;
     }
+    /*
+      The menu button appears only on pages with a sidebar. Rather than
+      popping in with display (which shoves the search button over in one
+      frame), it is always laid out here, collapsed to zero width, and
+      grows in while it fades and scales up; the search button slides
+      aside with it. Same curve as the card ⇄ page transition.
+    */
     .header-menu-btn {
-      width: 36px;
+      display: inline-flex;
+      width: 0;
       height: 36px;
       flex-shrink: 0;
+      margin-left: -0.45rem; /* cancels the row gap while collapsed */
+      overflow: hidden;
+      opacity: 0;
+      transform: scale(0.6);
+      visibility: hidden;
+      pointer-events: none;
+      transition:
+        width var(--duration-slow) var(--ease-out),
+        margin-left var(--duration-slow) var(--ease-out),
+        transform var(--duration-slow) var(--ease-out),
+        opacity var(--duration-exit) var(--ease-in),
+        visibility 0s linear var(--duration-slow),
+        background-color var(--transition-fast),
+        color var(--transition-fast);
+    }
+    /* Before the script below runs, :has() decides (first paint); after
+       that, the has-menu class does, so the change can be animated. */
+    :global(html:has(#doc-sidebar)) .site-header:not(.menu-js) .header-menu-btn,
+    .site-header.has-menu .header-menu-btn {
+      width: 36px;
+      margin-left: 0;
+      opacity: 1;
+      transform: scale(1);
+      visibility: visible;
+      pointer-events: auto;
+      transition:
+        width var(--duration-slow) var(--ease-out),
+        margin-left var(--duration-slow) var(--ease-out),
+        transform var(--duration-slow) var(--ease-out),
+        opacity var(--duration-enter) var(--ease-out) 60ms,
+        visibility 0s,
+        background-color var(--transition-fast),
+        color var(--transition-fast);
+    }
+    .site-header.has-menu .header-menu-btn:active {
+      transform: scale(0.95);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .header-menu-btn,
+      .site-header.has-menu .header-menu-btn {
+        transition: none;
+      }
     }
   }
 
@@ -280,7 +350,7 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
       --header-offset: calc(0.25rem + 48px);
     }
     .site-header {
-      padding: 0.25rem 0.5rem 0;
+      padding: 0.25rem var(--mobile-gutter) 0;
     }
     .header-inner {
       padding: 0 0.4rem 0 0.8rem;

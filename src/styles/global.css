@@ -84,7 +84,7 @@ button {
 /* ── Skip Link ─────────────────────────────────────────── */
 .skip-to-content {
   position: absolute;
-  top: -100px;
+  top: 1rem;
   left: 1.5rem;
   z-index: 10000;
   padding: 0.5rem 1rem;
@@ -94,11 +94,12 @@ button {
   font-weight: 500;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-modal);
-  transition: top var(--transition-fast);
+  transform: translateY(-120px);
+  transition: transform var(--transition-fast);
 }
 
 .skip-to-content:focus {
-  top: 1rem;
+  transform: translateY(0);
 }
 
 /* ── Scrollbars ────────────────────────────────────────── */
@@ -196,4 +197,69 @@ body {
 /* ── Smooth momentum scrolling on iOS ─────────────────── */
 html {
   -webkit-overflow-scrolling: touch;
+}
+
+/* ── Phones: one side gutter for header and page content ── */
+/* The header capsule, cards, update box and tag hero all start and end at
+   the same distance from the screen edge. */
+@media (max-width: 640px) {
+  :root {
+    --mobile-gutter: 0.75rem;
+  }
+}
+@media (max-width: 360px) {
+  :root {
+    --mobile-gutter: 0.5rem;
+  }
+}
+
+/* ── Phones: no visible scrollbars ─────────────────────── */
+/* Touch scrolling is unaffected; only the bars are hidden. */
+@media (max-width: 640px) {
+  /* !important: some scrollers (main, the menu) style a thin bar in more
+     specific rules. */
+  * {
+    scrollbar-width: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
+/* ── Category chip ─────────────────────────────────────── */
+/* One design for the tags on update cards and on the update page, so a
+   tag keeps its exact shape (size, padding, radius, fill) while it moves
+   between the two in the card ⇄ page transition. */
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.73rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.66);
+  border: none;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-full);
+  box-shadow: 0 1px 2px rgba(13, 17, 23, 0.03);
+  text-decoration: none;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+@media (max-width: 640px) {
+  .tag-chip {
+    font-size: 0.7rem;
+    padding: 0.27rem 0.55rem;
+  }
+}
+@media (max-width: 380px) {
+  .tag-chip {
+    font-size: 0.68rem;
+    padding: 0.25rem 0.5rem;
+  }
 }

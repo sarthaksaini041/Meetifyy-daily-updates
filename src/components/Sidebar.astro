@@ -90,8 +90,8 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
     visibility: hidden;
     pointer-events: none;
     transition:
-      opacity 180ms ease,
-      visibility 0s linear 180ms;
+      opacity var(--duration-exit) var(--ease-in),
+      visibility 0s linear var(--duration-exit);
   }
 
   .mobile-sidebar-backdrop.active {
@@ -99,7 +99,7 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
     visibility: visible;
     pointer-events: auto;
     transition:
-      opacity 200ms ease,
+      opacity var(--duration-enter) var(--ease-out),
       visibility 0s;
   }
 
@@ -133,6 +133,13 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
     }
   }
 
+  /* Phones: the menu panel follows the page's side gutter. */
+  @media (max-width: 640px) {
+    .doc-sidebar {
+      width: calc(100% - 2 * var(--mobile-gutter)) !important;
+    }
+  }
+
   /* ── Mobile Dropdown Menu (Triggered by Header Icon) ── */
   @media (max-width: 1024px) {
     .doc-sidebar {
@@ -162,9 +169,9 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
       pointer-events: none;
       transform: translate(-50%, -8px) scale(0.98);
       transition:
-        opacity 140ms ease-in,
-        transform 160ms ease-in,
-        visibility 0s linear 160ms;
+        opacity var(--duration-exit) var(--ease-in),
+        transform var(--duration-exit) var(--ease-in),
+        visibility 0s linear var(--duration-exit);
     }
 
     .doc-sidebar.mobile-open {
@@ -173,15 +180,10 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
       pointer-events: auto;
       transform: translate(-50%, 0) scale(1);
       transition:
-        opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
-        transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+        opacity var(--duration-enter) var(--ease-out),
+        transform var(--duration-enter) var(--ease-out),
         visibility 0s;
     }
-  }
-
-  .doc-sidebar.no-transition,
-  .mobile-sidebar-backdrop.no-transition {
-    transition: none !important;
   }
 
   .doc-sidebar::-webkit-scrollbar {
@@ -356,15 +358,6 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
       sidebar?.querySelector<HTMLElement>('.day-link.active, .day-link')?.focus({ preventScroll: true });
     }
 
-    // Used when a menu link navigates: hide the menu in the same frame so the
-    // page transition snapshot doesn't capture it mid-fade (and the fade
-    // doesn't compete with the transition for frames).
-    function closeMobileSidebarInstantly() {
-      sidebar?.classList.add('no-transition');
-      backdrop?.classList.add('no-transition');
-      closeMobileSidebar();
-    }
-
     function closeMobileSidebar() {
       sidebar?.classList.remove('mobile-open');
       backdrop?.classList.remove('active');
@@ -408,11 +401,13 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
       }
     }, { signal });
 
-    // Menu links navigate via the client router; hide the menu first.
+    // Menu links navigate via the client router: the menu closes with its
+    // normal fade while the page fades out (see the page transition in
+    // BaseLayout), so the two leave together.
     sidebar.querySelectorAll<HTMLAnchorElement>('.day-link, #sidebar-all-updates-btn').forEach((link) => {
       link.addEventListener('click', () => {
         if (window.innerWidth <= 1024) {
-          closeMobileSidebarInstantly();
+          closeMobileSidebar();
         }
       });
     });

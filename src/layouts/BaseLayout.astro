@@ -89,7 +89,16 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
       Pairing: Fraunces (display: titles and headings) + Plus Jakarta Sans
       (text) + Geist Mono (code).
     -->
-    <style is:inline set:html={`
+    <!--
+      Persisted across client-side navigations. Without this the router
+      swaps in a new (identical) copy of this <style> on every page change,
+      which re-creates the @font-face rules: every font goes back to
+      "unloaded" and the first frame of the new page is laid out in the
+      fallback faces, then re-flows a frame later. That re-flow moved text
+      after it had been measured for the card ⇄ page transition (pieces
+      landed a few px off and snapped; tag chips looked squeezed).
+    -->
+    <style is:inline data-astro-transition-persist="site-fonts" set:html={`
       @font-face {
         font-family: 'Plus Jakarta Sans';
         font-style: normal;
@@ -331,6 +340,10 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
         One continuous shared-element morph, run on the live DOM (the
         router's own swap is instant; see the styles below).
 
+        Motion is transform-only (FLIP), so it runs on the compositor and
+        keeps moving through the swap, and it starts on click whenever the
+        destination box is known from an earlier visit (see startFlight).
+
         The moving shape is a single "morph" surface on <html>, outside
         <body>, so it survives the page swap. It sits at z-index -1: above
         the sky (which is the canvas background), below all page content.
@@ -359,13 +372,17 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
         window.__pageMorph = true;
 
         var KEY = 'mfx-scroll:';
-        var EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
-        var DURATION = 480;
+        var CARD_KEY = 'mfx-card:';   // a card's box in the list, saved when it opens
+        var DEST_KEY = 'mfx-dest:';   // the update box, per viewport size
+        var DURATION = 600;
         var EXIT = 140;
+        var STEPS = 16;               // keyframe samples along the eased path
+        var ease = cubicBezier(0.32, 0.72, 0, 1);
         var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
         var nav = { type: 'push', from: '' };
         var pending = null;
         var morphEl = null;
+        var flight = null;
 
         // Properties copied onto the content copy so it renders identically
         // after its stylesheet is gone.
@@ -379,6 +396,26 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           'overflow', 'text-overflow', '-webkit-line-clamp', '-webkit-box-orient', 'opacity',
           'width', 'min-width', 'max-width', 'height', 'box-sizing', 'vertical-align'];
 
+        // CSS cubic-bezier(), so the sampled keyframes follow the same curve.
+        function cubicBezier(x1, y1, x2, y2) {
+          function at(a, b, t) { return ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t; }
+          function slope(a, b, t) { return 3 * (1 - 3 * b + 3 * a) * t * t + 2 * (3 * b - 6 * a) * t + 3 * a; }
+          return function(x) {
+            if (x <= 0 || x >= 1) return x <= 0 ? 0 : 1;
+            var t = x;
+            for (var i = 0; i < 8; i++) {
+              var d = slope(x1, x2, t);
+              if (Math.abs(d) < 1e-6) break;
+              t -= (at(x1, x2, t) - x) / d;
+            }
+            if (t < 0 || t > 1 || Math.abs(at(x1, x2, t) - x) > 1e-4) {
+              var lo = 0, hi = 1;
+              for (var j = 0; j < 30; j++) { t = (lo + hi) / 2; if (at(x1, x2, t) < x) lo = t; else hi = t; }
+            }
+            return at(y1, y2, t);
+          };
+        }
+
         function main() { return document.getElementById('main-content'); }
         function edge() {
           var h = document.querySelector('.header-inner');
@@ -388,8 +425,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
         // Visible part of an element (below the scroll edge). `extend`
         // lets it continue past the viewport bottom, so a morph never shows
         // rounded lower corners at the screen edge that the real element
-        // (which continues off screen) doesn't have: that mismatch was a
-        // visible snap when a lower card finished closing.
+        // (which continues off screen) doesn't have.
         function visibleRect(el, extend) {
           var r = el.getBoundingClientRect();
           var top = Math.max(r.top, edge());
@@ -398,17 +434,39 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
         }
         // A card's real box, cut only at the top scroll edge (where <main>'s
         // rounded clip cuts it too). Never cut at the viewport bottom: the
-        // morph must end exactly where the real card is, even if part of it
-        // is off screen, or the handover snaps.
+        // morph must end exactly where the real card is.
         function cardRect(el) {
           var r = el.getBoundingClientRect();
           var top = Math.max(r.top, edge());
-          return { x: r.left, y: top, w: r.width, h: Math.max(0, r.bottom - top), top: r.top };
+          return { x: r.left, y: top, w: r.width, h: Math.max(0, r.bottom - top) };
         }
         function isVisible(el) { return visibleRect(el).h > 40; }
         function surfaceOf(el) {
           var cs = getComputedStyle(el);
-          return { bg: cs.backgroundColor, radius: parseFloat(cs.borderTopLeftRadius) || 20 };
+          return { bg: cs.backgroundColor, radius: parseFloat(cs.borderTopLeftRadius) || 20, shadow: parseShadow(cs.boxShadow) };
+        }
+        function sameRect(a, b) {
+          return Math.abs(a.x - b.x) < 1.5 && Math.abs(a.y - b.y) < 1.5 && Math.abs(a.w - b.w) < 1.5 && Math.abs(a.h - b.h) < 1.5;
+        }
+
+        // "rgba(..) 0px 1px 2px 0px inset, ..." → [{color, x, y, blur, spread, inset}]
+        function parseShadow(s) {
+          if (!s || s === 'none') return [];
+          return s.split(/,(?![^(]*\))/).map(function(part) {
+            var color = (part.match(/rgba?\([^)]*\)|#[0-9a-f]+/i) || ['transparent'])[0];
+            var n = part.replace(color, '').match(/-?[\d.]+px/g) || [];
+            n = n.map(parseFloat);
+            return { color: color, x: n[0] || 0, y: n[1] || 0, blur: n[2] || 0, spread: n[3] || 0, inset: /inset/.test(part) };
+          });
+        }
+        // The shadow as it must be written on a box scaled by (sx, sy) so it
+        // renders at its true size. Blur is uniform, so it follows the
+        // vertical scale: the visible part of these shadows is below the box.
+        function scaledShadow(list, sx, sy) {
+          if (!list.length) return 'none';
+          return list.map(function(s) {
+            return (s.inset ? 'inset ' : '') + (s.x / sx) + 'px ' + (s.y / sy) + 'px ' + (s.blur / sy) + 'px ' + (s.spread / sy) + 'px ' + s.color;
+          }).join(', ');
         }
 
         function styledCopy(el) {
@@ -418,64 +476,122 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
             var cs = getComputedStyle(src);
             var css = '';
             for (var k = 0; k < PROPS.length; k++) css += PROPS[k] + ':' + cs.getPropertyValue(PROPS[k]) + ';';
+            // Chrome reports a line-clamped box's display as flow-root; copied
+            // as is, the clamp (and its "…") is lost.
+            if (cs.getPropertyValue('-webkit-line-clamp') !== 'none') css += 'display:-webkit-box;';
             dst.setAttribute('style', css);
             dst.removeAttribute('id');
             for (var n = 0; n < src.childNodes.length; n++) walk(src.childNodes[n], dst.childNodes[n]);
           })(el, copy);
           return copy;
         }
-        // Copies of `blocks`, positioned exactly where they are on screen,
-        // relative to rect r.
+        // Copies of `blocks`, positioned where they are on screen relative
+        // to rect r's top-left corner.
         function contentLayer(blocks, r) {
           var layer = document.createElement('div');
           layer.className = 'page-morph-content';
-          blocks.forEach(function(b) {
-            var br = b.getBoundingClientRect();
-            var c = styledCopy(b);
-            c.style.position = 'absolute';
-            c.style.left = (br.left - r.x) + 'px';
-            c.style.top = (br.top - r.y) + 'px';
-            c.style.width = br.width + 'px';
-            c.style.margin = '0';
-            layer.appendChild(c);
-          });
+          blocks.forEach(function(b) { layer.appendChild(pinnedCopy(b, r)); });
           return layer;
         }
+        function pinnedCopy(b, r) {
+          var br = b.getBoundingClientRect();
+          var c = styledCopy(b);
+          c.style.position = 'absolute';
+          c.style.left = (br.left - r.x) + 'px';
+          c.style.top = (br.top - r.y) + 'px';
+          c.style.width = br.width + 'px';
+          c.style.margin = '0';
+          return c;
+        }
 
-        function frame(r, surf) {
-          return {
-            transform: 'translate(' + r.x + 'px,' + r.y + 'px)',
-            width: r.w + 'px',
-            height: r.h + 'px',
-            borderRadius: surf.radius + 'px',
-            backgroundColor: surf.bg
-          };
-        }
-        function createMorph(r, surf, layer) {
-          removeMorph();
-          morphEl = document.createElement('div');
-          morphEl.className = 'page-morph';
-          Object.assign(morphEl.style, frame(r, surf));
-          if (layer) morphEl.appendChild(layer);
-          document.documentElement.appendChild(morphEl);
-        }
         function removeMorph() {
           if (morphEl) morphEl.remove();
           morphEl = null;
+          flight = null;
         }
-        // clip-path on `el` that traces rect r (viewport coords) with radius.
-        function clipFor(el, r, radius) {
-          var b = el.getBoundingClientRect();
-          return 'inset(' + (r.y - b.top) + 'px ' + (b.right - (r.x + r.w)) + 'px ' +
-            (b.bottom - (r.y + r.h)) + 'px ' + (r.x - b.left) + 'px round ' + radius + 'px)';
+
+        /*
+          The flight: one surface that moves from rect `from` to rect `to`.
+
+          FLIP-style: the surface is laid out once at the destination size
+          and moved with transform only (translate + scale), which the
+          compositor runs by itself. So the shape keeps moving smoothly
+          through the router's page swap, which blocks the main thread for
+          a few frames (much longer on phones).
+
+          Scaling would squash the corners, shadow and content, so each
+          sampled keyframe carries the matching correction:
+            • border-radius and box-shadow divided by the current scale;
+            • the content copy counter-scaled back to true size.
+          Transform and the paint corrections are separate animations, so
+          the transform one stays eligible for the compositor.
+        */
+        function startFlight(from, to, layer, duration) {
+          var W = Math.max(1, to.r.w), H = Math.max(1, to.r.h);
+          if (morphEl) morphEl.remove();
+          morphEl = document.createElement('div');
+          morphEl.className = 'page-morph';
+          morphEl.style.width = W + 'px';
+          morphEl.style.height = H + 'px';
+          if (layer) morphEl.appendChild(layer);
+          document.documentElement.appendChild(morphEl);
+
+          var shadow = to.surf.shadow.length ? to.surf.shadow : from.surf.shadow;
+          var move = [], paint = [], counter = [];
+          for (var i = 0; i <= STEPS; i++) {
+            var o = i / STEPS, e = ease(o);
+            var x = from.r.x + (to.r.x - from.r.x) * e;
+            var y = from.r.y + (to.r.y - from.r.y) * e;
+            var w = Math.max(1, from.r.w + (to.r.w - from.r.w) * e);
+            var h = Math.max(1, from.r.h + (to.r.h - from.r.h) * e);
+            var sx = w / W, sy = h / H;
+            var rad = from.surf.radius + (to.surf.radius - from.surf.radius) * e;
+            move.push({ offset: o, transform: 'translate(' + x + 'px,' + y + 'px) scale(' + sx + ',' + sy + ')' });
+            paint.push({ offset: o, borderRadius: (rad / sx) + 'px / ' + (rad / sy) + 'px', boxShadow: scaledShadow(shadow, sx, sy) });
+            counter.push({ offset: o, transform: 'scale(' + (1 / sx) + ',' + (1 / sy) + ')' });
+          }
+          var opts = { duration: duration, easing: 'linear', fill: 'forwards' };
+          var f = {
+            start: performance.now(), duration: duration, from: from, to: to, layer: layer,
+            move: morphEl.animate(move, opts)
+          };
+          morphEl.animate(paint, opts);
+          morphEl.animate([{ backgroundColor: from.surf.bg }, { backgroundColor: to.surf.bg }],
+            { duration: duration, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' });
+          if (layer) layer.animate(counter, opts);
+          f.done = f.move.finished.catch(function() {});
+          flight = f;
+          return f;
         }
-        function anim(el, frames, opts) {
-          return el.animate(frames, Object.assign({ duration: DURATION, easing: EASE, fill: 'forwards' }, opts))
-            .finished.catch(function() {});
+        function elapsed(f) { return f ? performance.now() - f.start : 0; }
+        // Where the surface is right now, on its eased path.
+        function rectNow(f) {
+          var e = ease(Math.min(1, elapsed(f) / f.duration));
+          function l(a, b) { return a + (b - a) * e; }
+          return {
+            r: { x: l(f.from.r.x, f.to.r.x), y: l(f.from.r.y, f.to.r.y), w: l(f.from.r.w, f.to.r.w), h: l(f.from.r.h, f.to.r.h) },
+            surf: { bg: f.to.surf.bg, radius: l(f.from.surf.radius, f.to.surf.radius), shadow: f.to.surf.shadow }
+          };
         }
-        function fade(els, from, to, duration, delay) {
+        // The predicted destination was off (resize, different layout):
+        // continue from the current position to the real one, no jump.
+        function retarget(f, to) {
+          if (sameRect(f.to.r, to.r)) return f;
+          var now = rectNow(f);
+          var left = Math.max(220, f.duration - elapsed(f));
+          // The content copy keeps its running fade; only the surface restarts.
+          return startFlight(now, to, f.layer, left);
+        }
+
+        // An animation that behaves as if it started `at` ms ago.
+        function animAt(el, frames, opts, at) {
+          var a = el.animate(frames, Object.assign({ fill: 'forwards' }, opts));
+          a.currentTime = Math.max(0, at || 0);
+          return a.finished.catch(function() {});
+        }
+        function fade(els, from, to, duration, delay, at) {
           return Promise.all(els.filter(Boolean).map(function(el) {
-            return anim(el, [{ opacity: from }, { opacity: to }], { duration: duration, delay: delay || 0, easing: 'linear' });
+            return animAt(el, [{ opacity: from }, { opacity: to }], { duration: duration, delay: delay || 0, easing: 'linear' }, at);
           }));
         }
         function reset(els) {
@@ -492,25 +608,405 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           el.style.background = 'transparent';
           el.style.boxShadow = 'none';
         }
+        // clip-path on `el` that traces rect r (viewport coords) with radius.
+        function clipFor(b, r, radius) {
+          return 'inset(' + (r.y - b.top) + 'px ' + (b.right - (r.x + r.w)) + 'px ' +
+            (b.bottom - (r.y + r.h)) + 'px ' + (r.x - b.left) + 'px round ' + radius + 'px)';
+        }
 
-        // The shared morph: shape from→to, source copy out, destination in.
-        function run(from, to, dest, destContent) {
-          var shape = anim(morphEl, [frame(from.r, from.surf), frame(to.r, to.surf)]);
-          var copy = morphEl.firstChild;
-          if (copy) fade([copy], 1, 0, DURATION * 0.5);
+        // Reveal the real destination inside the flying shape: a clip-path
+        // on the same sampled path and clock. Joins mid-flight when the
+        // swap lands after the start. (Its content is choreographed
+        // separately: shared pieces fly, the rest rises in.)
+        function reveal(f, dest) {
+          var at = elapsed(f);
           hideSurface(dest);
-          anim(dest, [{ clipPath: clipFor(dest, from.r, from.surf.radius) }, { clipPath: clipFor(dest, to.r, to.surf.radius) }]);
-          destContent.forEach(function(el) { el.style.opacity = '0'; });
-          fade(destContent, 0, 1, DURATION * 0.8, DURATION * 0.2);
-          return shape.then(function() {
-            reset([dest].concat(destContent));
-            removeMorph();
+          if (at >= f.duration) return;
+          var b = dest.getBoundingClientRect(), frames = [];
+          var start = f.from, end = f.to;
+          for (var i = 0; i <= STEPS; i++) {
+            var e = ease(i / STEPS);
+            frames.push({
+              offset: i / STEPS,
+              clipPath: clipFor(b, {
+                x: start.r.x + (end.r.x - start.r.x) * e, y: start.r.y + (end.r.y - start.r.y) * e,
+                w: start.r.w + (end.r.w - start.r.w) * e, h: start.r.h + (end.r.h - start.r.h) * e
+              }, start.surf.radius + (end.surf.radius - start.surf.radius) * e)
+            });
+          }
+          animAt(dest, frames, { duration: f.duration, easing: 'linear' }, at);
+        }
+
+        /*
+          Shared pieces. The date, commit count, title, summary and every
+          tag exist on both the card and the update page, so each one
+          travels between its two positions instead of fading in place.
+
+          A copy of the source piece moves and scales onto the destination
+          (scale = font-size ratio, anchored at the start of its first line,
+          so text never stretches), while a copy of the destination piece
+          makes the same trip from the source; the two crossfade on the way.
+          That is also how the date chip's background arrives: it belongs to
+          the destination copy and fades in with it.
+
+          Every piece of one transition shares one clock with the surface,
+          so pieces stay inside the moving shape. Positions are remembered
+          per update and viewport, which lets the pieces start moving on
+          click together with the surface; the destination copies join once
+          the new page exists. Transform and opacity only, in one fixed
+          layer; all measuring is batched before any writes.
+        */
+        var PIECE_KEY = 'mfx-pieces:';
+        var EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+        var HOME = 'translate(0px, 0px) scale(1)';
+        var PIECES = [
+          ['date', '.card-date-heading', '.journal-date-chip'],
+          ['commits', '.card-commits', '.journal-commit-count'],
+          ['title', '.card-title', '.journal-main-title'],
+          ['summary', '.card-desc', '.journal-focus-summary'],
+          // The tag row moves as one unit: chips flown one by one cross
+          // each other whenever the row wraps differently on the two sides.
+          ['tags', '.card-tags', '.journal-categories']
+        ];
+        // Pieces that wrap (title, summary); the others never do.
+        var MULTI = { title: true, summary: true, tags: true };
+        var sharedEl = null;
+
+        // side 1 = card, 2 = update page
+        function collectPieces(root, side) {
+          var out = {};
+          if (!root) return out;
+          PIECES.forEach(function(p) {
+            var el = root.querySelector(p[side]);
+            if (el) out[p[0]] = el;
+          });
+          return out;
+        }
+        // Box, first-line text origin and font size of each piece.
+        function measurePieces(els) {
+          var out = {};
+          Object.keys(els).forEach(function(k) {
+            var el = els[k], box = el.getBoundingClientRect();
+            var range = document.createRange();
+            range.selectNodeContents(el);
+            var line = range.getClientRects()[0] || box;
+            if (k === 'tags') {
+              // Anchored at the row's corner; sized by its chips' font; `sig`
+              // is the chip layout, to tell whether both rows wrap alike.
+              var chips = el.querySelectorAll('.tag-chip');
+              out[k] = { x: box.left, y: box.top, w: box.width, tx: box.left, ty: box.top,
+                fs: chips[0] ? parseFloat(getComputedStyle(chips[0]).fontSize) : 12,
+                sig: Array.prototype.map.call(chips, function(c) {
+                  var r = c.getBoundingClientRect();
+                  return [Math.round(r.left - box.left), Math.round(r.top - box.top)];
+                }) };
+              return;
+            }
+            out[k] = { x: box.left, y: box.top, w: box.width, tx: line.left, ty: line.top,
+              fs: parseFloat(getComputedStyle(el).fontSize) || 16 };
+          });
+          return out;
+        }
+        function shiftPieces(g, dx, dy) {
+          var out = {};
+          Object.keys(g || {}).forEach(function(k) {
+            var p = g[k];
+            out[k] = { x: p.x + dx, y: p.y + dy, w: p.w, tx: p.tx + dx, ty: p.ty + dy, fs: p.fs, sig: p.sig };
+          });
+          return out;
+        }
+        function sharedLayer() {
+          removeShared();
+          sharedEl = document.createElement('div');
+          sharedEl.className = 'page-morph-shared';
+          // Same top edge as <main>'s rounded scroll clip.
+          sharedEl.style.clipPath = 'inset(' + edge() + 'px 0 0 0)';
+          document.documentElement.appendChild(sharedEl);
+          return sharedEl;
+        }
+        function removeShared() {
+          if (sharedEl) sharedEl.remove();
+          sharedEl = null;
+        }
+        // The piece layer is clipped to the moving surface (same sampled
+        // path and clock), so no text ever shows outside the card shape.
+        function clipShared(f) {
+          if (!sharedEl || !f) return;
+          if (sharedEl.__clip) sharedEl.__clip.cancel();
+          var top = edge(), vw = window.innerWidth, vh = window.innerHeight, frames = [];
+          for (var i = 0; i <= STEPS; i++) {
+            var e = ease(i / STEPS);
+            var x = f.from.r.x + (f.to.r.x - f.from.r.x) * e, y = f.from.r.y + (f.to.r.y - f.from.r.y) * e;
+            var w = f.from.r.w + (f.to.r.w - f.from.r.w) * e, h = f.from.r.h + (f.to.r.h - f.from.r.h) * e;
+            var rad = f.from.surf.radius + (f.to.surf.radius - f.from.surf.radius) * e;
+            frames.push({ offset: i / STEPS, clipPath: 'inset(' + Math.max(y, top) + 'px ' + (vw - x - w) + 'px ' +
+              (vh - y - h) + 'px ' + x + 'px round ' + rad + 'px)' });
+          }
+          sharedEl.__clip = sharedEl.animate(frames, { duration: f.duration, easing: 'linear', fill: 'forwards' });
+          sharedEl.__clip.currentTime = Math.max(0, elapsed(f));
+        }
+        // Styled copies of pieces, placed where the pieces are.
+        function pieceCopies(els, g) {
+          var out = {};
+          Object.keys(els).forEach(function(k) {
+            var c = styledCopy(els[k]);
+            c.style.position = 'absolute';
+            c.style.left = g[k].x + 'px';
+            c.style.top = g[k].y + 'px';
+            // Exact size, never padded: a wider tag copy shows a wider chip
+            // (the gaps between tags shrink, then snap back at handover), and
+            // a wider summary lets one more word in. Single-line pieces take
+            // their natural width and cannot wrap; text blocks keep the
+            // measured width, so they wrap exactly like the original.
+            if (MULTI[k]) {
+              c.style.width = g[k].w + 'px';
+            } else {
+              c.style.width = 'max-content';
+              c.style.whiteSpace = 'nowrap';
+            }
+            c.style.margin = '0';
+            c.style.opacity = '1';
+            c.style.transformOrigin = (g[k].tx - g[k].x) + 'px ' + (g[k].ty - g[k].y) + 'px';
+            out[k] = c;
+          });
+          Object.keys(out).forEach(function(k) { sharedEl.appendChild(out[k]); });
+          return out;
+        }
+        // Transform taking a piece at geometry a onto geometry b.
+        function hop(a, b) {
+          return 'translate(' + (b.tx - a.tx) + 'px, ' + (b.ty - a.ty) + 'px) scale(' + (b.fs / a.fs) + ')';
+        }
+        // Keyframe lists always end at offset 1: a missing end keyframe
+        // would fall back to the element's own (visible) value.
+        function onClock(el, frames, clock, easing) {
+          var a = el.animate(frames, { duration: clock.dur, easing: easing || 'linear', fill: 'both' });
+          a.currentTime = Math.max(0, performance.now() - clock.start);
+          (clock.anims || (clock.anims = [])).push(a);
+          return a;
+        }
+        // Resolves once every animation on the clock has finished AND that
+        // final frame has been painted: only then may copies be swapped for
+        // the real elements (a timer could fire a frame early, leaving the
+        // copies a pixel or two short of their resting place).
+        function clockDone(clock) {
+          // Cancelled animations (retimed fades) are skipped: after cancel()
+          // their `finished` promise is a fresh one that never settles.
+          var live = (clock.anims || []).filter(function(a) { return a.playState !== 'idle'; });
+          return Promise.all(live.map(function(a) { return a.finished.catch(function() {}); }))
+            .then(function() { return new Promise(function(res) { requestAnimationFrame(function() { res(); }); }); });
+        }
+        /*
+          Fade timing follows distance, not time. The motion curve is
+          front-loaded (half the distance in the first ~17% of the time),
+          so a fade scheduled on the plain clock lags behind the movement:
+          text still fully visible when another piece has already crossed
+          it. Every fade window below is given in *distance travelled*
+          (0–1) and converted to a clock offset with the inverse curve,
+          like Material's container-transform "progress thresholds".
+
+          Three kinds of piece:
+            • identical on both sides (tags, commit count): one continuous
+              object — the source copy flies, and the destination copy,
+              exactly on top of it, replaces it in a single frame. No
+              crossfade, so no brightness dip from two copies blending.
+            • the date: the same, while its chip (background + border)
+              fades in or out around the text as it travels.
+            • title and summary, which wrap differently on each side:
+              fade-through — the source is gone within the first quarter
+              of the distance, the destination appears over the last part.
+        */
+        function tAt(e) {
+          var lo = 0, hi = 1;
+          for (var i = 0; i < 24; i++) { var m = (lo + hi) / 2; if (ease(m) < e) lo = m; else hi = m; }
+          return (lo + hi) / 2;
+        }
+        function kindOf(key) {
+          if (key === 'title' || key === 'summary') return 'text';
+          if (key === 'date') return 'chip';
+          if (key === 'tags') return 'row';
+          return 'same';
+        }
+        function progress(clock) {
+          return Math.max(0, Math.min(1, (performance.now() - clock.start) / clock.dur));
+        }
+        function isChip(copy) { return copy.classList.contains('journal-date-chip'); }
+        // Opacity that switches from a to b at clock offset t (one frame).
+        function stepOpacity(copy, clock, a, b, t) {
+          if (copy.__fade) copy.__fade.cancel();
+          t = Math.min(0.999, Math.max(0.001, t));
+          copy.__fade = onClock(copy, [
+            { opacity: a, offset: 0 }, { opacity: a, offset: t },
+            { opacity: b, offset: Math.min(1, t + 0.001) }, { opacity: b, offset: 1 }
+          ], clock);
+        }
+        function fadeWindow(copy, clock, a, b, t0, t1) {
+          if (copy.__fade) copy.__fade.cancel();
+          t0 = Math.max(0, Math.min(0.98, t0));
+          t1 = Math.max(t0 + 0.02, Math.min(1, t1));
+          copy.__fade = onClock(copy, [
+            { opacity: a, offset: 0 }, { opacity: a, offset: t0 },
+            { opacity: b, offset: t1 }, { opacity: b, offset: 1 }
+          ], clock);
+        }
+        // Chip fill and border of the date, faded (not popped) between two
+        // clock offsets; direction 1 = appearing, -1 = disappearing.
+        function chipFade(copy, el, clock, t0, t1, dir) {
+          var cs = getComputedStyle(el);
+          var on = { backgroundColor: cs.backgroundColor, borderColor: cs.borderTopColor };
+          var off = { backgroundColor: 'rgba(0, 0, 0, 0)', borderColor: 'rgba(0, 0, 0, 0)' };
+          var a = dir > 0 ? off : on, b = dir > 0 ? on : off;
+          t0 = Math.max(0, Math.min(0.98, t0));
+          t1 = Math.max(t0 + 0.02, Math.min(1, t1));
+          onClock(copy, [
+            Object.assign({ offset: 0 }, a), Object.assign({ offset: t0 }, a),
+            Object.assign({ offset: t1, easing: 'ease-out' }, b), Object.assign({ offset: 1 }, b)
+          ], clock);
+        }
+        // Source copy: heads for its destination.
+        function flySource(copy, from, to, clock, key, el) {
+          if (!to) {
+            fadeWindow(copy, clock, 1, 0, 0, tAt(0.3));
+            return;
+          }
+          onClock(copy, [{ transform: HOME }, { transform: hop(from, to) }], clock, EASE);
+          var kind = kindOf(key);
+          if (kind === 'text') fadeWindow(copy, clock, 1, 0, 0, tAt(0.25));
+          else stepOpacity(copy, clock, 1, 1, 1); // replaced when the destination joins (row: decided then)
+          // Leaving the page: the date's chip melts away early in the trip.
+          if (kind === 'chip' && isChip(copy)) chipFade(copy, el, clock, 0, tAt(0.6), -1);
+        }
+        // Destination copy joins (after the swap) on the same clock.
+        function flyDest(copy, to, from, clock, key, el, srcCopy) {
+          var now = progress(clock);
+          if (!from) {
+            // Only on this side: settles in near the end with a small rise.
+            var late = Math.max(now, tAt(0.7));
+            onClock(copy, [
+              { opacity: 0, transform: 'translate(0px, 8px) scale(1)', offset: 0 },
+              { opacity: 0, transform: 'translate(0px, 8px) scale(1)', offset: late, easing: EASE },
+              { opacity: 1, transform: HOME, offset: 1 }
+            ], clock);
+            return;
+          }
+          onClock(copy, [{ transform: hop(to, from) }, { transform: HOME }], clock, EASE);
+          var kind = kindOf(key);
+          if (kind === 'text') {
+            fadeWindow(copy, clock, 0, 1, Math.max(now, tAt(0.6)), tAt(0.95));
+            return;
+          }
+          if (kind === 'row' && !sameRow(from.sig, to.sig)) {
+            // Wraps differently: hand over like text, but late enough that
+            // the source row has cleared before the new one shows.
+            if (srcCopy) fadeWindow(srcCopy, clock, 1, 0, now, now + 0.12);
+            fadeWindow(copy, clock, 0, 1, Math.max(now + 0.12, tAt(0.6)), tAt(0.95));
+            return;
+          }
+          // Hand over in one frame, once any chip on the source has melted.
+          var at = kind === 'chip' && srcCopy && isChip(srcCopy) ? Math.max(now, tAt(0.6)) : now;
+          stepOpacity(copy, clock, 0, 1, at);
+          if (srcCopy) stepOpacity(srcCopy, clock, 1, 0, at);
+          // Arriving on the page: the chip grows in around the moving date.
+          if (kind === 'chip' && isChip(copy)) chipFade(copy, el, clock, at, Math.max(at + 0.05, tAt(0.97)), 1);
+        }
+
+        function sameRow(a, b) {
+          if (!a || !b || a.length !== b.length) return false;
+          for (var i = 0; i < a.length; i++) {
+            if (Math.abs(a[i][0] - b[i][0]) > 1 || Math.abs(a[i][1] - b[i][1]) > 1) return false;
+          }
+          return true;
+        }
+
+        // Where a flying copy's text is right now (its transform is read,
+        // not recomputed, so the re-aimed path starts exactly there).
+        function currentGeom(copy, g) {
+          var m = new DOMMatrix(getComputedStyle(copy).transform);
+          return { x: g.x, y: g.y, w: g.w, tx: g.tx + m.e, ty: g.ty + m.f, fs: g.fs * m.a, sig: g.sig };
+        }
+        // Source copies were flying toward a guess: re-aim each from its
+        // current position (and opacity) at its real destination on a new
+        // clock. Returns the positions they start from, which the
+        // destination copies start from too.
+        function retargetSources(p, destG, clock) {
+          var from = {};
+          Object.keys(p.srcCopies).forEach(function(k) {
+            var copy = p.srcCopies[k], g = p.srcG[k];
+            from[k] = currentGeom(copy, g);
+            var o = parseFloat(getComputedStyle(copy).opacity);
+            copy.getAnimations().forEach(function(a) { a.cancel(); });
+            copy.__fade = null;
+            if (!destG[k]) { fadeWindow(copy, clock, o, 0, 0, 0.15); return; }
+            onClock(copy, [{ transform: hop(g, from[k]) }, { transform: hop(g, destG[k]) }], clock, EASE);
+            if (kindOf(k) === 'text') fadeWindow(copy, clock, o, 0, 0, 0.2);
+            else stepOpacity(copy, clock, o, o, 1);
+          });
+          return from;
+        }
+
+        // Source pieces with no counterpart on the new page fade out now.
+        function dropOrphans(src, dest, clock) {
+          var now = progress(clock);
+          Object.keys(src).forEach(function(k) {
+            if (!dest[k]) fadeWindow(src[k], clock, 1, 0, now, now + 0.15);
           });
         }
+
+        // The rest of the page settles in after the pieces, top to bottom:
+        // a short fade and rise, lightly staggered. Only blocks on screen.
+        function riseIn(els, clock) {
+          var c = { start: clock.start, dur: clock.dur * 1.45 };
+          els.forEach(function(el, i) {
+            var s = Math.min(0.62, 0.32 + Math.min(i, 6) * 0.05);
+            onClock(el, [
+              { opacity: 0, transform: 'translateY(12px)', offset: 0 },
+              { opacity: 0, transform: 'translateY(12px)', offset: s, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' },
+              { opacity: 1, transform: 'translateY(0px)', offset: 1 }
+            ], c);
+          });
+          return c;
+        }
+        function onScreen(els) {
+          var vh = window.innerHeight;
+          return els.filter(function(b) {
+            var r = b.getBoundingClientRect();
+            return r.height > 0 && r.top < vh && r.bottom > 0;
+          });
+        }
+        function values(o) { return Object.keys(o).map(function(k) { return o[k]; }); }
 
         function scrollMainTo(y) {
           var m = main();
           if (m) m.scrollTo({ top: y, behavior: 'instant' });
+        }
+        function readJSON(key) {
+          try { var v = sessionStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (err) { return null; }
+        }
+        function writeJSON(key, v) {
+          try { sessionStorage.setItem(key, JSON.stringify(v)); } catch (err) {}
+        }
+        function viewportKey() { return window.innerWidth + 'x' + window.innerHeight; }
+
+        /*
+          Every other navigation (sidebar days, previous/next, tag pages,
+          back to a list whose card is off screen) gets a quiet fade
+          through instead of an instant swap: the old content leaves on the
+          exit curve, the new content settles in on the entry curve. Between
+          two update pages only the reading column fades; the sidebar and
+          header stay put.
+        */
+        var FADE_OUT = 140, FADE_IN = 280;
+        function plainTransition(e) {
+          var fromUpdate = e.from.pathname.indexOf('/updates/') !== -1;
+          var toUpdate = e.to.pathname.indexOf('/updates/') !== -1;
+          var sel = fromUpdate && toUpdate && document.querySelector('.doc-content-rail') ? '.doc-content-rail' : '#main-content';
+          var region = document.querySelector(sel);
+          nav.fadeIn = sel;
+          var load = e.loader;
+          e.loader = function() {
+            var out = region ? region.animate([{ opacity: 1 }, { opacity: 0 }],
+              { duration: FADE_OUT, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }).finished.catch(function() {}) : null;
+            return Promise.all([load(), out]);
+          };
         }
 
         // 1. Remember which card was clicked (only that one animates).
@@ -522,7 +1018,9 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           if (card && isVisible(card)) pending = { kind: 'open', card: card };
         }, true);
 
-        // 2. Before the swap: save scroll, hand the source over to the morph.
+        // 2. Before the swap: save scroll, start the flight right away when
+        //    the destination is known, so it is already moving (on the
+        //    compositor) when the swap blocks the main thread.
         document.addEventListener('astro:before-preparation', function(e) {
           // e.from, not location: on back/forward the URL has already changed.
           nav.type = e.navigationType;
@@ -536,31 +1034,102 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           }
           if (!pending || (pending.kind === 'open' && e.to.pathname.indexOf('/updates/') === -1)) {
             pending = null;
+            if (!reduce.matches) plainTransition(e);
             return;
           }
 
-          var p = pending, load = e.loader;
+          var p = pending, load = e.loader, toPath = e.to.pathname;
           e.loader = function() {
             var exit;
             if (p.kind === 'open') {
               var card = p.card;
+              // Drop the pressed-state scale first: measuring a card at
+              // scale(0.993) stored positions 1–2 px off for the way back.
+              card.style.transition = 'none';
+              card.style.transform = 'none';
+              var r = card.getBoundingClientRect();
+              var slug = card.dataset.updateSlug;
+              var els = collectPieces(card, 1);
               p.from = { r: cardRect(card), surf: surfaceOf(card) };
-              createMorph(p.from.r, p.from.surf, contentLayer([card.querySelector('.card-inner')], p.from.r));
-              card.style.visibility = 'hidden'; // the morph is its exact stand-in
+              p.srcG = measurePieces(els);
+              p.srcEls = els;
+              // Where this card and its pieces sit in the list, for the way back.
+              writeJSON(CARD_KEY + slug, {
+                top: r.top + (m ? m.scrollTop : 0), x: r.left, w: r.width, h: r.height,
+                bg: p.from.surf.bg, radius: p.from.surf.radius, vp: viewportKey(),
+                pieces: shiftPieces(p.srcG, -r.left, -r.top)
+              });
+              sharedLayer();
+              p.srcCopies = pieceCopies(els, p.srcG);
+              card.style.visibility = 'hidden'; // surface + copies stand in for it
+              var dest = readJSON(DEST_KEY + viewportKey());
+              if (dest) {
+                var f0 = startFlight(p.from, { r: dest.r, surf: { bg: dest.bg, radius: dest.radius, shadow: p.from.surf.shadow } }, null, DURATION);
+                var destG = readJSON(PIECE_KEY + slug + '|' + viewportKey());
+                if (!destG) {
+                  // This update hasn't been opened at this size yet: until its
+                  // page exists, the pieces ride with the box (same offset
+                  // from its corner) instead of waiting behind it; they are
+                  // re-aimed at their real places after the swap.
+                  destG = shiftPieces(p.srcG, dest.r.x - p.from.r.x, dest.r.y - p.from.r.y);
+                  p.guess = true;
+                }
+                p.clock = { start: f0.start, dur: DURATION };
+                Object.keys(p.srcCopies).forEach(function(k) { flySource(p.srcCopies[k], p.srcG[k], destG[k] || null, p.clock, k, els[k]); });
+              } else {
+                startFlight(p.from, p.from, null, 1); // parked until the swap
+              }
+              clipShared(flight);
               var others = Array.prototype.filter.call(document.querySelectorAll('.update-card'), function(c) { return c !== card; });
-              exit = fade(others, 1, 0, EXIT);
+              // Front-loaded: mostly gone before the surface grows over them.
+              exit = Promise.all(others.map(function(c) {
+                return animAt(c, [{ opacity: 1 }, { opacity: 0 }], { duration: EXIT, easing: 'cubic-bezier(0, 0, 0.2, 1)' }, 0);
+              }));
             } else {
               var w = p.wrapper;
+              var header = w.querySelector('.journal-hero-header');
+              var pageEls = collectPieces(header, 2);
               p.from = { r: visibleRect(w, 80), surf: surfaceOf(w) };
+              p.srcG = measurePieces(pageEls);
+              p.srcEls = pageEls;
               var article = w.querySelector('.markdown-body');
-              var blocks = Array.prototype.slice.call(w.children).filter(function(c) { return c !== article; })
+              // Everything but the header (whose pieces fly) fades with the surface.
+              var blocks = Array.prototype.slice.call(w.children).filter(function(c) { return c !== article && c !== header; })
                 .concat(article ? Array.prototype.slice.call(article.children) : [])
                 .filter(function(b) {
                   var br = b.getBoundingClientRect();
                   return br.bottom > p.from.r.y && br.top < window.innerHeight && br.height > 0;
                 });
-              createMorph(p.from.r, p.from.surf, contentLayer(blocks, p.from.r));
+              var pageLayer = contentLayer(blocks, p.from.r);
+              sharedLayer();
+              p.srcCopies = pieceCopies(pageEls, p.srcG);
               w.style.visibility = 'hidden';
+              // Predict the card's box from where it was when opened and
+              // the list scroll that is about to be restored.
+              var slug = (nav.from.split('/updates/')[1] || '').replace(/\/$/, '');
+              var saved = readJSON(CARD_KEY + slug);
+              var listScroll = null;
+              try { listScroll = sessionStorage.getItem(KEY + toPath); } catch (err) {}
+              var predicted = null, cardTop = 0;
+              if (saved && saved.vp === viewportKey() && listScroll !== null) {
+                cardTop = saved.top - Number(listScroll);
+                var y = Math.max(cardTop, edge());
+                if (y + 40 < window.innerHeight && cardTop + saved.h - y > 40) {
+                  predicted = { x: saved.x, y: y, w: saved.w, h: cardTop + saved.h - y };
+                }
+              }
+              if (predicted) {
+                var f1 = startFlight(p.from, { r: predicted, surf: { bg: saved.bg, radius: saved.radius, shadow: p.from.surf.shadow } }, pageLayer, DURATION);
+                if (saved.pieces) {
+                  var cardG = shiftPieces(saved.pieces, saved.x, cardTop);
+                  p.clock = { start: f1.start, dur: DURATION };
+                  Object.keys(p.srcCopies).forEach(function(k) { flySource(p.srcCopies[k], p.srcG[k], cardG[k] || null, p.clock, k, pageEls[k]); });
+                }
+              } else {
+                startFlight(p.from, p.from, pageLayer, 1);
+              }
+              clipShared(flight);
+              fade([pageLayer], 1, 0, DURATION * 0.32);
               exit = fade([document.querySelector('.doc-sidebar')], 1, 0, EXIT);
             }
             return Promise.all([load(), exit]);
@@ -578,54 +1147,115 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           var restore = saved !== null && (nav.type === 'traverse' || (fromUpdate && isListPath(path)));
           scrollMainTo(restore ? Number(saved) : 0);
 
+          if (nav.fadeIn) {
+            // Plain navigation: the new page settles in (fade + small rise).
+            // <main> is the scroll container, so it only fades; a column
+            // inside it may also rise.
+            var region = document.querySelector(nav.fadeIn) || main();
+            var rise = nav.fadeIn !== '#main-content';
+            nav.fadeIn = null;
+            if (region) region.animate(rise
+              ? [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }]
+              : [{ opacity: 0 }, { opacity: 1 }],
+              { duration: FADE_IN, easing: EASE, fill: 'backwards' });
+          }
+
           var p = pending;
           pending = null;
-          if (!p || !morphEl) { removeMorph(); return; }
+          if (!p || !morphEl || !flight) { removeShared(); removeMorph(); return; }
+          var f = flight;
 
           if (p.kind === 'open') {
             var wrapper = document.querySelector('.doc-reading-wrapper');
-            if (!wrapper) return removeMorph();
+            if (!wrapper) { removeShared(); return removeMorph(); }
+            var header = wrapper.querySelector('.journal-hero-header');
+            var destEls = collectPieces(header, 2);
+            // Reads first (geometry, styles, copies), writes after.
+            var to = { r: visibleRect(wrapper, 80), surf: surfaceOf(wrapper) };
+            var destG = measurePieces(destEls);
+            var flow = [];
+            Array.prototype.forEach.call(wrapper.children, function(c) {
+              if (c === header) return;
+              if (c.classList.contains('markdown-body')) Array.prototype.push.apply(flow, c.children);
+              else flow.push(c);
+            });
+            flow = onScreen(flow);
+            writeJSON(DEST_KEY + viewportKey(), { r: to.r, bg: to.surf.bg, radius: to.surf.radius });
+            writeJSON(PIECE_KEY + path.split('/updates/')[1].replace(/\/$/, '') + '|' + viewportKey(), destG);
+            if (!sharedEl) sharedLayer();
+            var destCopies = pieceCopies(destEls, destG);
+
+            f = f.duration === 1 ? startFlight(p.from, to, null, DURATION) : retarget(f, to);
+            clipShared(f);
+            var clock = p.clock, fromG = p.srcG;
+            if (clock && p.guess) {
+              clock = { start: performance.now(), dur: Math.max(320, p.clock.start + p.clock.dur - performance.now()) };
+              fromG = retargetSources(p, destG, clock);
+            }
+            if (!clock) {
+              clock = { start: performance.now(), dur: Math.max(360, f.start + f.duration - performance.now()) };
+              Object.keys(p.srcCopies).forEach(function(k) { flySource(p.srcCopies[k], p.srcG[k], destG[k] || null, clock, k, p.srcEls[k]); });
+            }
+            values(destEls).forEach(function(el) { el.style.opacity = '0'; });
+            Object.keys(destCopies).forEach(function(k) {
+              flyDest(destCopies[k], destG[k], fromG[k] || null, clock, k, destEls[k], p.srcCopies[k]);
+            });
+            dropOrphans(p.srcCopies, destCopies, clock);
+
             var sidebar = document.querySelector('.doc-sidebar');
             if (sidebar) {
               sidebar.style.opacity = '0';
-              fade([sidebar], 0, 1, DURATION * 0.6, DURATION * 0.3).then(function() { reset([sidebar]); });
+              fade([sidebar], 0, 1, DURATION * 0.6, DURATION * 0.3, elapsed(f)).then(function() { reset([sidebar]); });
             }
-            run(p.from, { r: visibleRect(wrapper, 80), surf: surfaceOf(wrapper) },
-              wrapper, Array.prototype.slice.call(wrapper.children));
+            reveal(f, wrapper);
+            var settle = riseIn(flow, clock);
+            var done = f, layer = sharedEl;
+            f.done.then(function() {
+              reset([wrapper]);
+              if (flight === done) removeMorph();
+            });
+            clockDone(clock).then(function() {
+              reset(values(destEls));
+              if (sharedEl === layer) removeShared();
+            });
+            clockDone(settle).then(function() { reset(flow); });
           } else {
             var slug = (nav.from.split('/updates/')[1] || '').replace(/\/$/, '');
             var card = document.querySelector('.update-card[data-update-slug="' + slug + '"]');
             var others = Array.prototype.filter.call(document.querySelectorAll('.update-card'), function(c) { return c !== card; });
             others.forEach(function(c) { c.style.opacity = '0'; });
-            fade(others, 0, 1, DURATION * 0.6, DURATION * 0.3).then(function() { reset(others); });
+            fade(others, 0, 1, DURATION * 0.6, DURATION * 0.3, elapsed(f)).then(function() { reset(others); });
             if (card && isVisible(card)) {
-              // The card's slot stays empty; the shrinking morph carries a
-              // copy of the card's content (pinned to its top-left, so it
-              // travels with the shape) and lands exactly in the slot, where
-              // the real card takes over with no visible change.
-              var to = { r: cardRect(card), surf: surfaceOf(card) };
-              var inner = card.querySelector('.card-inner');
-              var ir = inner.getBoundingClientRect();
-              var cardCopy = styledCopy(inner);
-              cardCopy.style.position = 'absolute';
-              cardCopy.style.left = (ir.left - to.r.x) + 'px';
-              cardCopy.style.top = (ir.top - to.r.y) + 'px';
-              cardCopy.style.width = ir.width + 'px';
-              cardCopy.style.margin = '0';
-              cardCopy.style.opacity = '0';
-              var pageCopy = morphEl.firstChild;
-              morphEl.appendChild(cardCopy);
+              var cardEls = collectPieces(card, 1);
+              var cto = { r: cardRect(card), surf: surfaceOf(card) };
+              var cardG = measurePieces(cardEls);
+              if (!sharedEl) sharedLayer();
+              var cardCopies = pieceCopies(cardEls, cardG);
+              f = f.duration === 1 ? startFlight(p.from, cto, f.layer, DURATION) : retarget(f, cto);
+              clipShared(f);
+              var clock2 = p.clock || { start: performance.now(), dur: Math.max(360, f.start + f.duration - performance.now()) };
+              if (!p.clock) Object.keys(p.srcCopies).forEach(function(k) { flySource(p.srcCopies[k], p.srcG[k], cardG[k] || null, clock2, k, p.srcEls[k]); });
+              // The card's slot stays empty while the surface and the copies
+              // land in it; then the real card takes over with no change.
               card.style.visibility = 'hidden';
-              if (pageCopy) fade([pageCopy], 1, 0, DURATION * 0.45);
-              fade([cardCopy], 0, 1, DURATION * 0.5, DURATION * 0.25);
-              anim(morphEl, [frame(p.from.r, p.from.surf), frame(to.r, to.surf)]).then(function() {
+              Object.keys(cardCopies).forEach(function(k) {
+                flyDest(cardCopies[k], cardG[k], p.srcG[k] || null, clock2, k, cardEls[k], p.srcCopies[k]);
+              });
+              dropOrphans(p.srcCopies, cardCopies, clock2);
+              var landed = f, layer2 = sharedEl;
+              Promise.all([f.done, clockDone(clock2)]).then(function() {
                 reset([card]);
-                removeMorph();
+                if (sharedEl === layer2) removeShared();
+                if (flight === landed) removeMorph();
               });
             } else {
-              // Card is off screen: fade the morph out rather than fly to it.
+              // Card is off screen: fade the surface out rather than fly to it.
               if (card) { card.style.opacity = '0'; fade([card], 0, 1, DURATION * 0.6, DURATION * 0.3).then(function() { reset([card]); }); }
-              fade([morphEl], 1, 0, DURATION * 0.6).then(removeMorph);
+              var gone = f, layer3 = sharedEl;
+              fade([morphEl, sharedEl], 1, 0, DURATION * 0.6).then(function() {
+                if (sharedEl === layer3) removeShared();
+                if (flight === gone) removeMorph();
+              });
             }
           }
         });
@@ -726,8 +1356,19 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
        card, which read as a small snap at the handover. */
   }
 
+  /* Flying copies of the shared pieces (date, title, tags…): above page
+     content, below the header. */
+  .page-morph-shared {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
   .page-morph-content {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0; /* counter-scaled against the surface (see script) */
   }
 </style>

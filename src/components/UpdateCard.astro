@@ -30,7 +30,7 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
 
       <div class="card-tags" aria-label="Categories">
         {update.categories.map((category) => (
-          <span class="card-tag">{category}</span>
+          <span class="card-tag tag-chip">{category}</span>
         ))}
       </div>
 
@@ -41,7 +41,9 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 <style>
   .update-card {
-    --glass-fill: var(--glass-fill-card);
+    /* Same fill as the opened update, so the surface keeps one colour
+       through the card ⇄ page transition. */
+    --glass-fill: var(--glass-fill-reading);
     --glass-radius: 20px;
     position: relative;
     scroll-margin-top: calc(var(--header-height) + 1.25rem);
@@ -115,24 +117,8 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
     margin: 0.05rem 0 0.15rem;
   }
 
-  .card-tag {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.73rem;
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: 0.015em;
-    color: var(--color-text-secondary);
-    background: rgba(255, 255, 255, 0.62);
-    border: none;
-    padding: 0.25rem 0.55rem;
-    border-radius: var(--radius-sm);
-    box-shadow: 0 1px 2px rgba(13, 17, 23, 0.02);
-    transition:
-      color var(--transition-fast),
-      background-color var(--transition-fast),
-      border-color var(--transition-fast);
-  }
+  /* Chip design lives in global.css (.tag-chip), shared with the update
+     page so a tag keeps its exact shape through the card ⇄ page transition. */
 
   /* ── Description ────────────────────────── */
   .card-desc {
@@ -158,10 +144,6 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
     .card-date-heading {
       font-size: 0.75rem;
     }
-    .card-tag {
-      font-size: 0.7rem;
-      padding: 0.22rem 0.5rem;
-    }
     .card-desc {
       font-size: 0.875rem;
       line-height: 1.55;
@@ -171,10 +153,6 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
   @media (max-width: 380px) {
     .card-inner {
       padding: 1.1rem 1.15rem 1.15rem;
-    }
-    .card-tag {
-      font-size: 0.68rem;
-      padding: 0.2rem 0.45rem;
     }
   }
 </style>
