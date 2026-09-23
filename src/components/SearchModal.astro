@@ -194,6 +194,78 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
     background: rgba(15, 23, 42, 0.3);
   }
 
+  /* Opening: the reverse of closing — fade in while settling down into place. */
+  .search-modal[open]:not(.is-closing) {
+    animation: search-modal-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .search-modal[open]:not(.is-closing)::backdrop {
+    animation: search-backdrop-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes search-modal-in {
+    from { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
+    to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  }
+  @keyframes search-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Closing: fade and drift up slightly, backdrop fades with it. */
+  .search-modal.is-closing {
+    animation: search-modal-out 200ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    pointer-events: none;
+  }
+  .search-modal.is-closing::backdrop {
+    animation: search-backdrop-out 200ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+  @keyframes search-modal-out {
+    from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    to { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
+  }
+  @keyframes search-backdrop-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  /* Holds focus briefly on phones while the dialog animates in. */
+  .search-modal-container:focus {
+    outline: none;
+  }
+
+  /* Keep the animations on the compositor (opacity/transform only). */
+  .search-modal[open]:not(.is-closing),
+  .search-modal.is-closing {
+    will-change: opacity, transform;
+    backface-visibility: hidden;
+  }
+
+  /* Phones: the dialog is full-screen with no centring transform, so use
+     keyframes without translate(-50%) or scale — just a short fade + slide. */
+  @media (max-width: 640px) {
+    .search-modal[open]:not(.is-closing) {
+      animation: search-modal-in-mobile 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .search-modal.is-closing {
+      animation: search-modal-out-mobile 200ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    }
+    @keyframes search-modal-in-mobile {
+      from { opacity: 0; transform: translate3d(0, 12px, 0); }
+      to { opacity: 1; transform: translate3d(0, 0, 0); }
+    }
+    @keyframes search-modal-out-mobile {
+      from { opacity: 1; transform: translate3d(0, 0, 0); }
+      to { opacity: 0; transform: translate3d(0, 12px, 0); }
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .search-modal[open],
+    .search-modal[open]::backdrop,
+    .search-modal.is-closing,
+    .search-modal.is-closing::backdrop {
+      animation-duration: 1ms;
+    }
+  }
+
   .search-modal-container {
     display: flex;
     flex-direction: column;
@@ -1154,17 +1226,38 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
       sections: new Set() // section keys from src/lib/sections.mjs
     };
 
-    async function loadSearchIndex() {
-      if (searchIndex) return searchIndex;
-      try {
-        const res = await fetch(`${baseUrl}/search-index.json`);
-        if (!res.ok) throw new Error('Search index response was not ok');
-        searchIndex = await res.json();
-        return searchIndex;
-      } catch (err) {
-        console.error('Failed to load search index:', err);
-        return [];
+    // One shared request: hover-warming and the open click never fetch twice.
+    // A failed load is not cached, so the next open retries.
+    let searchIndexPromise = null;
+    function loadSearchIndex() {
+      if (searchIndex) return Promise.resolve(searchIndex);
+      if (!searchIndexPromise) {
+        searchIndexPromise = fetch(`${baseUrl}/search-index.json`)
+          .then((res) => {
+            if (!res.ok) throw new Error('Search index response was not ok');
+            return res.json();
+          })
+          .then((data) => {
+            // Lower-cased haystack built once per item, not on every keystroke.
+            for (const item of data) {
+              item.searchText = [
+                item.title,
+                item.summary,
+                item.fullDate,
+                item.shortDate,
+                ...item.categories,
+                item.content
+              ].join(' ').toLowerCase();
+            }
+            return (searchIndex = data);
+          })
+          .catch((err) => {
+            console.error('Failed to load search index:', err);
+            searchIndexPromise = null;
+            return [];
+          });
       }
+      return searchIndexPromise;
     }
 
     function initSearch() {
@@ -1462,31 +1555,83 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
         }
       }
 
+      const isPhone = window.matchMedia('(max-width: 640px)');
+
+      // Warm the search index on intent (hover, focus, touch on the search
+      // button) so the first open isn't held up by a fetch, without making
+      // visitors who never search download it. loadSearchIndex() caches.
+      ['pointerenter', 'focus', 'touchstart'].forEach((type) => {
+        openBtn?.addEventListener(type, () => loadSearchIndex(), { once: true, passive: true });
+      });
+
       async function openModal() {
         if (dialog.open) return;
         // The long placeholder is truncated on narrow screens.
         input.placeholder = window.matchMedia('(max-width: 640px)').matches
           ? 'Search updates…'
           : 'Search updates, categories, or fixes…';
-        document.documentElement.classList.add('modal-open');
-        dialog.showModal();
+        // Build the results while the dialog is still closed, so no DOM work
+        // competes with the first frames of the opening animation.
         const data = await loadSearchIndex();
+        if (dialog.open) return;
         populateCategories(data);
         input.value = filterState.query;
         updateFilterUI();
-        executeSearch();
-        setTimeout(() => input.focus(), 50);
-      }
-
-      function closeModal() {
-        dialog.close();
-        document.documentElement.classList.remove('modal-open');
-        toggleFilterShelf(false);
-        // Return focus to the trigger when the browser didn't restore it.
-        if (document.activeElement === document.body) {
-          openBtn?.focus({ preventScroll: true });
+        await executeSearch();
+        if (dialog.open) return;
+        document.documentElement.classList.add('modal-open');
+        // showModal() focuses the first focusable element (the input). On phones,
+        // send that initial focus to the container instead so the keyboard waits.
+        if (modalContainer) {
+          modalContainer.tabIndex = -1;
+          modalContainer.autofocus = isPhone.matches;
+        }
+        dialog.showModal();
+        if (isPhone.matches) {
+          // On phones the keyboard resizes the viewport; raise it only once
+          // the dialog has finished animating in.
+          let focused = false;
+          const focusInput = () => {
+            if (focused || !dialog.open) return;
+            focused = true;
+            input.focus({ preventScroll: true });
+          };
+          dialog.addEventListener('animationend', focusInput, { once: true });
+          setTimeout(focusInput, 320);
+        } else {
+          input.focus({ preventScroll: true });
         }
       }
+
+      // Play the closing animation, then actually close the dialog.
+      let closeTimer = null;
+      function closeModal() {
+        if (!dialog.open || dialog.classList.contains('is-closing')) return;
+        document.documentElement.classList.remove('modal-open');
+        dialog.classList.add('is-closing');
+        const finish = () => {
+          clearTimeout(closeTimer);
+          dialog.removeEventListener('animationend', onEnd);
+          dialog.classList.remove('is-closing');
+          if (dialog.open) dialog.close();
+          toggleFilterShelf(false);
+          // Return focus to the trigger when the browser didn't restore it.
+          if (document.activeElement === document.body) {
+            openBtn?.focus({ preventScroll: true });
+          }
+        };
+        const onEnd = (e) => { if (e.target === dialog) finish(); };
+        dialog.addEventListener('animationend', onEnd);
+        closeTimer = setTimeout(finish, 300); // fallback if animationend never fires
+      }
+
+      // The dialog persists across client-side navigation, so close it when a
+      // result is followed in this tab (new-tab clicks leave it open).
+      resultsList.addEventListener('click', (e) => {
+        const link = e.target.closest('.search-result-item');
+        if (!link || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        closeModal();
+      });
 
       openBtn?.addEventListener('click', openModal);
       closeBtn?.addEventListener('click', closeModal);
@@ -1624,18 +1769,8 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
         // Filter updates
         const filtered = data.filter((item) => {
           // 1. Text Query Filter
-          if (tokens.length > 0) {
-            const searchable = [
-              item.title,
-              item.summary,
-              item.fullDate,
-              item.shortDate,
-              ...item.categories,
-              item.content
-            ].join(' ').toLowerCase();
-
-            const matchesTokens = tokens.every(token => searchable.includes(token));
-            if (!matchesTokens) return false;
+          if (tokens.length > 0 && !tokens.every((token) => item.searchText.includes(token))) {
+            return false;
           }
 
           // 2. Category Filter (Union / OR rule)

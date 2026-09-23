@@ -12,11 +12,14 @@ import geistMonoUrl from '@fontsource-variable/geist-mono/files/geist-mono-latin
 interface Props {
   title?: string;
   description?: string;
+  /** Preload the mono font (pages that show code). Elsewhere it loads on demand. */
+  preloadMono?: boolean;
 }
 
 const {
-  title = 'Meetifyy · Daily Updates',
-  description = "A chronological record of Meetifyy's development, technical improvements, fixes, and engineering progress."
+  title = 'Daily Updates',
+  description = "A chronological record of Meetifyy's development, technical improvements, fixes, and engineering progress.",
+  preloadMono = false
 } = Astro.props;
 
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -40,7 +43,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
     <meta property="og:url" content={canonicalUrl.href} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:site_name" content="Meetifyy Daily Updates" />
+    <meta property="og:site_name" content="Daily Updates" />
 
     <!--
       Background image: preloaded at high priority, one size per breakpoint.
@@ -67,7 +70,11 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
     <!-- Fonts: preloaded so they are normally ready before first paint. -->
     <link rel="preload" href={sansUrl} as="font" type="font/woff2" crossorigin="anonymous" />
     <link rel="preload" href={displayUrl} as="font" type="font/woff2" crossorigin="anonymous" />
-    <link rel="preload" href={geistMonoUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+    <!-- Mono is used only in code blocks (update pages, 404). Elsewhere it is
+         fetched at idle priority so a later navigation still finds it cached. -->
+    {preloadMono
+      ? <link rel="preload" href={geistMonoUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+      : <link rel="prefetch" href={geistMonoUrl} as="font" type="font/woff2" crossorigin="anonymous" />}
 
     <!--
       Critical styles, inlined so they apply on the very first frame.
@@ -136,7 +143,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
         --color-text-primary: #0d1117;
         --header-height: 64px;
         --site-bg-color: #6aa1df; /* sky average + the 10% wash */
-        --site-bg-placeholder: url('data:image/webp;base64,UklGRoIAAABXRUJQVlA4IHYAAADQBACdASoYABAAPrVKoEonJCMhsAgA4BaJagCdMoRwIr/S/4Dx/0mWt9+1BAHwgAD+uR3t4v8Zc9KoSCdcJ0FZQbJfYOFr/5L/bht0XKdv/CtbGvNHz4x9lNzR8EneBXGMEkSFJkR8NTFknX+z7Tt0fOyq0gAA');
+        --site-bg-placeholder: url('data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAADQBACdASoYABAAPtFUo0uoJKMhsAgBABoJagCdMoRwIr/S/4Dx/gdrmilWJamEgAD+nYNlPfMHc2H1JFVF185AnoS3/xHusgPbYjf/AUq8MBdpxa7rMk1h4qvj7zri2Si7JgrC1KqFjlvtkxhbUAAA');
         --site-bg-image: url('${baseUrl}/assets/site-bg-2560.webp');
       }
       @media (max-width: 768px) {
@@ -153,10 +160,8 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
       */
       body {
         background-color: var(--site-bg-color);
-        /* Top layer: a very light white wash so the sky reads slightly
-           translucent / softened rather than full-strength. */
+        /* Full-opacity background image, blurred at source asset level */
         background-image:
-          linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)),
           var(--site-bg-image),
           var(--site-bg-placeholder);
         background-repeat: no-repeat;

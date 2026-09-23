@@ -1,0 +1,360 @@
+---
+/**
+ * PuckWizard — decorative walking character on the Updates page.
+ *
+ * Sprite: "Puck - Wizard" by Mandi Paugh
+ * Source: https://opengameart.org/content/puck-wizard (puck-bm.png, 640×480)
+ * License: CC-BY 3.0 — Credit: Mandi Paugh / opengameart.org
+ *
+ * /assets/puck/puck-wizard.png is a 160×56 strip cut unchanged from the
+ * original sheet (magenta key → transparent). Five 32×56 cells:
+ *   0  stand   (sheet x=0,  y=0)
+ *   1  walk A  (sheet x=0,  y=64)  stride
+ *   2  walk B  (sheet x=36, y=64)  passing pose (body 1px higher, baked in)
+ *   3  walk C  (sheet x=72, y=64)  opposite stride
+ *   4  cheer   (sheet x=108, y=64) shown briefly on click
+ * The walk is a 3-frame cycle played ping-pong: A B C B. All cells share the
+ * same 56px baseline, so the feet stay put. The source faces left.
+ */
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+const spriteUrl = `${baseUrl}/assets/puck/puck-wizard.png`;
+---
+
+<!-- Sprite "Puck - Wizard" by Mandi Paugh, https://opengameart.org/content/puck-wizard, CC-BY 3.0 -->
+<div id="puck-track" aria-hidden="true">
+  <div id="puck-wizard">
+    <div class="puck-sprite" data-src={spriteUrl} style={`background-image: url('${spriteUrl}')`}></div>
+  </div>
+</div>
+
+<style>
+  #puck-track {
+    --puck-scale: 2;
+    position: fixed;
+    right: 16px;
+    bottom: 0;
+    width: 320px;
+    height: calc(56px * var(--puck-scale));
+    pointer-events: none;
+    z-index: 50;
+    contain: layout size;
+  }
+
+  #puck-wizard {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: calc(32px * var(--puck-scale));
+    height: calc(56px * var(--puck-scale));
+    opacity: 0;
+    transition: opacity 400ms ease;
+    will-change: transform;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  #puck-wizard.is-ready {
+    opacity: 1;
+  }
+
+  .puck-sprite {
+    width: 100%;
+    height: 100%;
+    background-repeat: no-repeat;
+    background-size: 500% 100%;
+    transform-origin: 50% 100%;
+    background-position: 0 0;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    /* Frames must swap instantly; the site's global transition would smear them. */
+    transition: none;
+    /* Source faces left; data-facing="right" mirrors it around its centre. */
+    transform: scaleX(1);
+  }
+
+  #puck-wizard[data-facing='right'] .puck-sprite {
+    transform: scaleX(-1);
+  }
+
+  .puck-sprite[data-frame='1'] { background-position: 25% 0; }
+  .puck-sprite[data-frame='2'] { background-position: 50% 0; }
+  .puck-sprite[data-frame='3'] { background-position: 75% 0; }
+  .puck-sprite[data-frame='4'] { background-position: 100% 0; }
+
+  /* Click: cheer pose + a small hop that lands back on the same baseline. */
+  #puck-wizard.is-cheering .puck-sprite {
+    animation: puck-hop 520ms cubic-bezier(0.3, 0, 0.3, 1);
+  }
+  #puck-wizard[data-facing='right'].is-cheering .puck-sprite {
+    animation-name: puck-hop-r;
+  }
+  @keyframes puck-hop {
+    0%, 100% { transform: translateY(0) scaleX(1); }
+    45% { transform: translateY(-10px) scaleX(1); }
+  }
+  @keyframes puck-hop-r {
+    0%, 100% { transform: translateY(0) scaleX(-1); }
+    45% { transform: translateY(-10px) scaleX(-1); }
+  }
+
+  .puck-spark {
+    position: absolute;
+    left: 50%;
+    top: 12%;
+    width: 6px;
+    height: 6px;
+    margin: -3px;
+    border-radius: 50%;
+    background: #ffd76a;
+    box-shadow: 0 0 6px 1px rgba(255, 200, 80, 0.8);
+    pointer-events: none;
+    animation: puck-spark 700ms ease-out forwards;
+  }
+  @keyframes puck-spark {
+    from { transform: translate(0, 0) scale(1); opacity: 1; }
+    to { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #puck-wizard.is-cheering .puck-sprite { animation: none; }
+    .puck-spark { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    #puck-track {
+      --puck-scale: 1.5;
+      right: 8px;
+      width: 220px;
+    }
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    // The client router re-runs inline scripts on every visit; boot once and
+    // let astro:page-load bring up each new copy of the element.
+    if (window.__puckBoot) return;
+    window.__puckBoot = true;
+    // Ping-pong over the 3 walk cells: A B C B.
+    var WALK_SEQ = [1, 2, 3, 2];
+    // Travel (in source pixels) per walk frame. The legs move about one source
+    // pixel per frame, so the animation is driven by distance travelled — the
+    // feet never slide, and frames slow down naturally while easing in/out.
+    var STEP_SRC_PX = 1;
+    var FRAME_MS = 160;           // frame length at cruising speed
+    var ACCEL_MS = 600;           // time to reach cruising speed
+
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    function init() {
+      var track = document.getElementById('puck-track');
+      var el = document.getElementById('puck-wizard');
+      if (!track || !el || el.__puckInit) return;
+      el.__puckInit = true;
+      var sprite = el.firstElementChild;
+
+      // Everything this instance registers outside its own element is torn
+      // down before the router swaps the page away, so visits don't pile up
+      // listeners or leave timers running against detached nodes.
+      var alive = true;
+      var listeners = new AbortController();
+      var signal = listeners.signal;
+      document.addEventListener('astro:before-swap', function () {
+        alive = false;
+        listeners.abort();
+        clearTimeout(timer);
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = null;
+      }, { signal: signal, once: true });
+
+      var scale, step, vMax, accel, maxX;
+      function measure() {
+        scale = el.offsetWidth / 32;
+        step = STEP_SRC_PX * scale;
+        vMax = step / (FRAME_MS / 1000);
+        accel = vMax / (ACCEL_MS / 1000);
+        maxX = Math.max(0, track.clientWidth - el.offsetWidth);
+      }
+      measure();
+
+      // Movement state (plain variables — only the DOM is touched, and only on change).
+      var x = maxX * (0.3 + Math.random() * 0.4);
+      var facing = Math.random() < 0.5 ? -1 : 1;
+      var walking = false;
+      var startX = 0, targetX = 0, v = 0;
+      var frame = -1, renderedX = null;
+      var rafId = null, lastT = 0, timer = null;
+
+      function setFrame(f) {
+        if (f === frame) return;
+        frame = f;
+        if (f === 0) sprite.removeAttribute('data-frame');
+        else sprite.setAttribute('data-frame', String(f));
+      }
+
+      function renderX() {
+        // Sub-pixel, GPU-composited translate: continuous motion with no stepping.
+        var px = Math.round(x * 100) / 100;
+        if (px === renderedX) return;
+        renderedX = px;
+        el.style.transform = 'translate3d(' + px + 'px,0,0)';
+      }
+
+      function setFacing(f) {
+        facing = f;
+        el.setAttribute('data-facing', f > 0 ? 'right' : 'left');
+      }
+
+      function stand() {
+        walking = false;
+        v = 0;
+        setFrame(0);
+        schedule(1600 + Math.random() * 2800, startWalk);
+      }
+
+      function schedule(ms, fn) {
+        if (!alive) return;
+        clearTimeout(timer);
+        timer = setTimeout(fn, ms);
+      }
+
+      // Pick a direction and distance. A turn happens on the stand frame and is
+      // held for a beat before the first step, so the flip never pops mid-stride.
+      function startWalk() {
+        if (cheering) return;
+        if (reduceMotion.matches || document.hidden) return schedule(2000, startWalk);
+        measure();
+        var dir = facing;
+        if (x <= step * 4) dir = 1;
+        else if (x >= maxX - step * 4) dir = -1;
+        else if (Math.random() < 0.4) dir = -facing;
+        if (pairsAhead(dir) < 2) dir = -dir;
+        if (pairsAhead(dir) < 2) return stand();
+        if (dir !== facing) {
+          setFacing(dir);
+          return schedule(450, beginSteps);
+        }
+        beginSteps();
+      }
+
+      // Room ahead in pairs of steps. Walking a whole number of pairs means the
+      // walk always ends on a stride cell (A or C), never mid-bob on B.
+      function pairsAhead(dir) {
+        var room = dir > 0 ? maxX - x : x;
+        return Math.floor(room / (step * 2));
+      }
+
+      function beginSteps() {
+        var n = Math.min(pairsAhead(facing), 6 + Math.floor(Math.random() * 20));
+        if (n < 1) return stand();
+        startX = x;
+        targetX = x + facing * n * step * 2;
+        walking = true;
+        v = 0;
+        setFrame(WALK_SEQ[0]);
+        startLoop();
+      }
+
+      function tick(t) {
+        rafId = null;
+        var dt = Math.min((t - lastT) / 1000, 1 / 20);
+        lastT = t;
+        if (!walking) return;
+
+        var remaining = Math.abs(targetX - x);
+        // Trapezoidal speed: ease in, cruise, then brake to land exactly on target.
+        v = Math.min(vMax, v + accel * dt, Math.sqrt(2 * accel * remaining) + accel * dt * 0.5);
+        var d = Math.max(v, vMax * 0.08) * dt;
+
+        if (d >= remaining) {
+          x = targetX;
+          renderX();
+          return stand();
+        }
+        x += facing * d;
+
+        var travelled = Math.abs(x - startX);
+        // Each step shows the pose it is heading into, so the final step
+        // (index 2n) lands on a stride cell right before switching to stand.
+        setFrame(WALK_SEQ[Math.ceil(travelled / step) % WALK_SEQ.length]);
+        renderX();
+        rafId = requestAnimationFrame(tick);
+      }
+
+      function startLoop() {
+        if (rafId !== null) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(tick);
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        // rAF pauses in background tabs; restart cleanly without a time jump.
+        if (!document.hidden && walking) {
+          if (rafId !== null) cancelAnimationFrame(rafId);
+          rafId = null;
+          startLoop();
+        }
+      }, { signal: signal });
+
+      window.addEventListener('resize', function () {
+        measure();
+        x = Math.min(x, maxX);
+        renderX();
+        // Scale or bounds may have changed; settle and re-plan from here.
+        if (walking) stand();
+      }, { signal: signal });
+
+      var cheering = false;
+      el.addEventListener('click', function () {
+        if (cheering) return;
+        cheering = true;
+        var wasWalking = walking;
+        walking = false;
+        clearTimeout(timer);
+        setFrame(4);
+        el.classList.add('is-cheering');
+        if (!reduceMotion.matches) {
+          for (var i = 0; i < 6; i++) {
+            var sp = document.createElement('span');
+            var a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+            sp.className = 'puck-spark';
+            sp.style.setProperty('--dx', Math.cos(a) * 28 + 'px');
+            sp.style.setProperty('--dy', Math.sin(a) * 22 - 10 + 'px');
+            sp.addEventListener('animationend', function () { this.remove(); });
+            el.appendChild(sp);
+          }
+        }
+        setTimeout(function () {
+          if (!alive) return;
+          el.classList.remove('is-cheering');
+          cheering = false;
+          // Resume the interrupted walk from the stand pose.
+          stand();
+          if (wasWalking) schedule(500, startWalk);
+        }, 700);
+      });
+
+      setFacing(facing);
+      setFrame(0);
+      renderX();
+
+      // Preload + decode before showing, so the first frame never flashes blank.
+      var img = new Image();
+      img.src = sprite.dataset.src;
+      (img.decode ? img.decode() : Promise.resolve())
+        .catch(function () {})
+        .then(function () {
+          if (!alive) return;
+          el.classList.add('is-ready');
+          schedule(1200, startWalk);
+        });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+    document.addEventListener('astro:page-load', init);
+  })();
+</script>

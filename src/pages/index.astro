@@ -1,17 +1,21 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import UpdateCard from '@/components/UpdateCard.astro';
+import PuckWizard from '@/components/PuckWizard.astro';
 import { getAllUpdates } from '@/lib/updates';
 
 const updates = await getAllUpdates();
 ---
 
 <BaseLayout
-  title="Meetifyy · Daily Updates"
+  title="Daily Updates"
   description="A chronological record of Meetifyy's development, technical improvements, fixes, and engineering progress."
 >
   <div class="homepage-layout-container">
-    <h1 class="sr-only">Meetifyy Daily Updates</h1>
+    <h1 class="sr-only">Daily Updates</h1>
+
+    <!-- Puck Wizard Companion -->
+    <PuckWizard />
 
     <!-- Main Updates Feed: Full available width without sidebar -->
     <section class="journal-feed" data-scroll-clip aria-label="Daily Engineering Updates">

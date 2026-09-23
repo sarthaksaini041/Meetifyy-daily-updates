@@ -12,12 +12,13 @@ const { update } = Astro.props;
 const { newer, older } = await getAdjacentUpdates(update.slug);
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-const pageTitle = `${update.title} — ${update.formattedDate} | Meetifyy Daily Updates`;
+const pageTitle = `${update.title} — ${update.formattedDate} | Daily Updates`;
 ---
 
 <BaseLayout
   title={pageTitle}
   description={update.summary}
+  preloadMono
 >
   <div class="doc-layout-container">
     <!-- Desktop Sticky Sidebar -->
