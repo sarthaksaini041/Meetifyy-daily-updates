@@ -148,17 +148,14 @@ const pageTitle = `${update.title} — ${update.formattedDate} | Daily Updates`;
     gap: 0.75rem;
   }
 
+  /* Same treatment as the card's date (.card-date-heading): plain brand
+     text, no chip, so the header reads as the card grown into a page. */
   .journal-date-chip {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 0;
     color: var(--color-brand);
-    background: var(--color-brand-light);
-    border: 1px solid var(--color-brand-muted);
-    padding: 0.25rem 0.65rem;
-    border-radius: var(--radius-full);
+    font-variant-numeric: tabular-nums;
   }
 
   .journal-main-title {
@@ -365,6 +362,9 @@ const pageTitle = `${update.title} — ${update.formattedDate} | Daily Updates`;
   }
 
   @media (max-width: 640px) {
+    .journal-date-chip {
+      font-size: 0.75rem; /* = .card-date-heading on phones */
+    }
     .doc-layout-container {
       padding: 0.6rem var(--mobile-gutter) 3rem;
     }

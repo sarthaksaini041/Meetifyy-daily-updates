@@ -1009,19 +1009,66 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           };
         }
 
+        /*
+          Phones: a native-style sheet instead of the card expansion.
+
+          The update page slides up from below the viewport over the list,
+          which recedes slightly towards the tapped card; going back
+          reverses it (the page slides down, the list comes forward from
+          that card). It runs on the router's view transition: the browser
+          animates snapshots of the old and new page on the compositor, so
+          nothing is copied or measured and it stays at 60fps. The header
+          is captured on its own and stays put. Styles: html.vt-sheet-*.
+
+          Desktop keeps the card ⇄ page flight above. Phones without view
+          transitions, and reduced motion, get the plain fade / no motion.
+        */
+        var phone = window.matchMedia('(max-width: 640px)');
+        var SHEET_ORIGIN = 'mfx-sheet-origin';
+        function sheetMode() {
+          return phone.matches && !reduce.matches && typeof document.startViewTransition === 'function';
+        }
+        // Astro copies the new page's <html> attributes on swap, which drops
+        // these classes; they are re-applied after the swap (before the
+        // browser captures the new page), from this state.
+        var sheet = null;
+        function startSheet(kind, origin) {
+          sheet = { kind: kind, origin: origin };
+          var html = document.documentElement;
+          html.classList.remove('vt-sheet-open', 'vt-sheet-back');
+          html.classList.add('vt-sheet', kind === 'open' ? 'vt-sheet-open' : 'vt-sheet-back');
+          html.style.setProperty('--vt-origin', origin || '50% 40%');
+        }
+        function endSheet() {
+          sheet = null;
+          var html = document.documentElement;
+          html.classList.remove('vt-sheet', 'vt-sheet-open', 'vt-sheet-back');
+          html.style.removeProperty('--vt-origin');
+        }
+        document.addEventListener('astro:before-swap', function(e) {
+          if (!document.documentElement.classList.contains('vt-sheet')) return;
+          if (e.viewTransition) e.viewTransition.finished.finally(endSheet);
+          else endSheet();
+        });
+
         // 1. Remember which card was clicked (only that one animates).
         document.addEventListener('click', function(e) {
           pending = null;
           var link = e.target.closest && e.target.closest('.card-link');
           if (!link || reduce.matches || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
           var card = link.closest('.update-card');
-          if (card && isVisible(card)) pending = { kind: 'open', card: card };
+          if (!card) return;
+          if (sheetMode()) pending = { kind: 'sheet-open', card: card };
+          else if (isVisible(card)) pending = { kind: 'open', card: card };
         }, true);
 
         // 2. Before the swap: save scroll, start the flight right away when
         //    the destination is known, so it is already moving (on the
         //    compositor) when the swap blocks the main thread.
         document.addEventListener('astro:before-preparation', function(e) {
+          // A sheet from a navigation that never reached its swap (cancelled)
+          // must not leak into this one.
+          endSheet();
           // e.from, not location: on back/forward the URL has already changed.
           nav.type = e.navigationType;
           nav.from = e.from.pathname;
@@ -1029,8 +1076,31 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
           try { if (m) sessionStorage.setItem(KEY + nav.from, String(Math.round(m.scrollTop))); } catch (err) {}
 
           var wrapper = document.querySelector('.doc-reading-wrapper');
-          if (!reduce.matches && wrapper && isListPath(e.to.pathname) && isVisible(wrapper)) {
+          if (wrapper && isListPath(e.to.pathname) && sheetMode()) {
+            pending = { kind: 'sheet-back' };
+          } else if (!reduce.matches && wrapper && isListPath(e.to.pathname) && isVisible(wrapper)) {
             pending = { kind: 'back', wrapper: wrapper };
+          }
+          if (window.__mfxFromSearch) {
+            // A search result: the search dialog covers the swap and then
+            // dissolves (SearchModal), so no transition of our own.
+            pending = null;
+            return;
+          }
+          if (pending && pending.kind === 'sheet-open' && e.to.pathname.indexOf('/updates/') !== -1) {
+            // The list recedes towards the tapped card; remembered so the
+            // way back comes forward from the same spot.
+            var cr = pending.card.getBoundingClientRect();
+            var origin = Math.round(cr.left + cr.width / 2) + 'px ' + Math.round(cr.top + cr.height / 2) + 'px';
+            try { sessionStorage.setItem(SHEET_ORIGIN, origin); } catch (err) {}
+            startSheet('open', origin);
+            return;
+          }
+          if (pending && pending.kind === 'sheet-back') {
+            var back = null;
+            try { back = sessionStorage.getItem(SHEET_ORIGIN); } catch (err) {}
+            startSheet('back', back);
+            return;
           }
           if (!pending || (pending.kind === 'open' && e.to.pathname.indexOf('/updates/') === -1)) {
             pending = null;
@@ -1162,6 +1232,10 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
 
           var p = pending;
           pending = null;
+          if (p && p.kind.indexOf('sheet') === 0) {
+            if (sheet) startSheet(sheet.kind, sheet.origin); // the view transition animates it
+            return;
+          }
           if (!p || !morphEl || !flight) { removeShared(); removeMorph(); return; }
           var f = flight;
 
@@ -1337,6 +1411,81 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site || 'https://meetifyy
   ::view-transition-old(root),
   ::view-transition-new(root) {
     animation: none;
+  }
+
+  /*
+    Phones only: the update box as a sheet (see the script). Only the box
+    travels; the sky behind is the same on both pages and stays still, so
+    nothing overlaps. Snapshots are animated with transform/opacity only.
+      open: the list cards recede and fade towards the tapped card while
+            the update box rises from below the screen.
+      back: the exact reverse — the box slides down and away while the
+            list comes forward from the same card.
+    The header is captured on its own, stays put and stays on top.
+  */
+  @media (max-width: 640px) {
+    html.vt-sheet .site-header {
+      view-transition-name: site-header;
+    }
+    html.vt-sheet .doc-reading-wrapper {
+      view-transition-name: update-sheet;
+    }
+    html.vt-sheet::view-transition-group(site-header) {
+      z-index: 2;
+      animation: none;
+    }
+    html.vt-sheet::view-transition-new(site-header) {
+      animation: none;
+    }
+    html.vt-sheet::view-transition-old(site-header) {
+      display: none;
+    }
+    html.vt-sheet::view-transition-group(update-sheet) {
+      animation: none;
+    }
+    html.vt-sheet::view-transition-old(root),
+    html.vt-sheet::view-transition-new(root),
+    html.vt-sheet::view-transition-old(update-sheet),
+    html.vt-sheet::view-transition-new(update-sheet) {
+      mix-blend-mode: normal;
+    }
+
+    /* Open: list (old page) above the plain new background, fading away. */
+    html.vt-sheet-open::view-transition-old(root) {
+      z-index: 1;
+      transform-origin: var(--vt-origin, 50% 40%);
+      animation: vt-list-away 460ms var(--ease-out) both;
+    }
+    html.vt-sheet-open::view-transition-new(root) {
+      animation: none;
+    }
+    html.vt-sheet-open::view-transition-new(update-sheet) {
+      animation: vt-sheet-up 460ms var(--ease-out) both;
+    }
+
+    /* Back: the box leaves downward; the list returns over the background. */
+    html.vt-sheet-back::view-transition-old(update-sheet) {
+      animation: vt-sheet-up 380ms var(--ease-out) reverse both;
+    }
+    html.vt-sheet-back::view-transition-old(root) {
+      animation: none;
+    }
+    html.vt-sheet-back::view-transition-new(root) {
+      transform-origin: var(--vt-origin, 50% 40%);
+      animation: vt-list-away 380ms var(--ease-out) reverse both;
+    }
+  }
+
+  @keyframes vt-sheet-up {
+    from { transform: translateY(100vh); }
+    to { transform: translateY(0); }
+  }
+  /* The list is gone by ~40% (the box is translucent, so text behind it
+     would show through), while its recede continues to the end. */
+  @keyframes vt-list-away {
+    0% { transform: scale(1); opacity: 1; }
+    40% { opacity: 0; }
+    100% { transform: scale(0.95); opacity: 0; }
   }
 
   /* Shared-element morph surface (see the transition script). z-index -1

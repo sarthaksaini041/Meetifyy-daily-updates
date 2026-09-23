@@ -263,3 +263,24 @@ html {
     padding: 0.25rem 0.5rem;
   }
 }
+
+/* ── Pressable controls: stable rendering ──────────────── */
+/* These shrink slightly while pressed (transform). Without a layer of their
+   own, the browser promotes them only while the press animates, which snaps
+   them to whole pixels: the icon/label jumps a fraction of a pixel on press
+   and back on release. Keeping them on a layer makes press and release
+   render identically. (Small controls only; cards are left as they are.) */
+.brand-link,
+.search-trigger-btn,
+.header-menu-btn,
+.search-close-btn,
+.filter-done-action,
+.sidebar-back-link,
+.day-link,
+.seq-link,
+.code-copy-btn,
+.return-link,
+.return-home-link {
+  will-change: transform;
+  backface-visibility: hidden;
+}

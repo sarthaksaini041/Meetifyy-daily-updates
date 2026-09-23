@@ -194,37 +194,57 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
     background: rgba(15, 23, 42, 0.3);
   }
 
-  /* Opening: the reverse of closing — fade in while settling down into place. */
+  /*
+    Open: the panel rises a few pixels into place while growing from 97%
+    (anchored at its top edge); opacity finishes early so it is never a
+    half-transparent smear. Close: a short, quicker exit on the leaving
+    curve. The backdrop follows the same timing. Transform/opacity only.
+  */
+  .search-modal {
+    transform-origin: 50% 0;
+  }
   .search-modal[open]:not(.is-closing) {
-    animation: search-modal-in var(--duration-enter) var(--ease-out);
+    animation: search-modal-in 320ms var(--ease-out);
   }
   .search-modal[open]:not(.is-closing)::backdrop {
-    animation: search-backdrop-in var(--duration-enter) var(--ease-out);
+    animation: search-backdrop-in 320ms var(--ease-out);
   }
   @keyframes search-modal-in {
-    from { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
-    to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    0% { opacity: 0; transform: translate(-50%, 12px) scale(0.97); }
+    55% { opacity: 1; }
+    100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
   }
   @keyframes search-backdrop-in {
     from { opacity: 0; }
     to { opacity: 1; }
   }
 
-  /* Closing: fade and drift up slightly, backdrop fades with it. */
   .search-modal.is-closing {
-    animation: search-modal-out var(--duration-exit) var(--ease-in) forwards;
+    animation: search-modal-out 200ms var(--ease-in) forwards;
     pointer-events: none;
   }
   .search-modal.is-closing::backdrop {
-    animation: search-backdrop-out var(--duration-exit) var(--ease-in) forwards;
+    animation: search-backdrop-out 200ms var(--ease-in) forwards;
   }
   @keyframes search-modal-out {
     from { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    to { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
+    to { opacity: 0; transform: translate(-50%, 6px) scale(0.985); }
   }
   @keyframes search-backdrop-out {
     from { opacity: 1; }
     to { opacity: 0; }
+  }
+  /* While a chosen result's page loads underneath: stays as a cover, but
+     no longer takes input. */
+  .search-modal.is-handoff {
+    pointer-events: none;
+  }
+  /* The router moves the persisted dialog into the new page, which would
+     restart its opening animation (a flash to transparent mid-handoff).
+     While covering a navigation it simply holds still. */
+  .search-modal.is-handoff,
+  .search-modal.is-handoff::backdrop {
+    animation: none !important;
   }
   /* Holds focus briefly on phones while the dialog animates in. */
   .search-modal-container:focus {
@@ -242,18 +262,19 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
      keyframes without translate(-50%) or scale — just a short fade + slide. */
   @media (max-width: 640px) {
     .search-modal[open]:not(.is-closing) {
-      animation: search-modal-in-mobile var(--duration-enter) var(--ease-out);
+      animation: search-modal-in-mobile 340ms var(--ease-out);
     }
     .search-modal.is-closing {
-      animation: search-modal-out-mobile var(--duration-exit) var(--ease-in) forwards;
+      animation: search-modal-out-mobile 200ms var(--ease-in) forwards;
     }
     @keyframes search-modal-in-mobile {
-      from { opacity: 0; transform: translate3d(0, 12px, 0); }
-      to { opacity: 1; transform: translate3d(0, 0, 0); }
+      0% { opacity: 0; transform: translate3d(0, 24px, 0); }
+      55% { opacity: 1; }
+      100% { opacity: 1; transform: translate3d(0, 0, 0); }
     }
     @keyframes search-modal-out-mobile {
       from { opacity: 1; transform: translate3d(0, 0, 0); }
-      to { opacity: 0; transform: translate3d(0, 12px, 0); }
+      to { opacity: 0; transform: translate3d(0, 16px, 0); }
     }
   }
 
@@ -1630,12 +1651,37 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
         closeTimer = setTimeout(finish, 300); // fallback if animationend never fires
       }
 
-      // The dialog persists across client-side navigation, so close it when a
-      // result is followed in this tab (new-tab clicks leave it open).
+      /*
+        Following a result (in this tab). The dialog persists across the
+        client-side navigation, so it is used as a cover: it stays up while
+        the update page loads and swaps in underneath, and dissolves only
+        once that page has been painted. No page fade runs for this
+        navigation (see BaseLayout: __mfxFromSearch), so there is never a
+        blank moment between the list and the update.
+      */
+      let handoffTimer = null;
       resultsList.addEventListener('click', (e) => {
         const link = e.target.closest('.search-result-item');
         if (!link || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (new URL(link.href, location.href).pathname === location.pathname) {
+          closeModal();
+          return;
+        }
+        window.__mfxFromSearch = true;
+        dialog.classList.add('is-handoff');
+        clearTimeout(handoffTimer);
+        handoffTimer = setTimeout(finishHandoff, 2500); // navigation failed or stalled
+      });
+      function finishHandoff() {
+        clearTimeout(handoffTimer);
+        window.__mfxFromSearch = false;
+        dialog.classList.remove('is-handoff');
         closeModal();
+      }
+      document.addEventListener('astro:after-swap', () => {
+        if (!window.__mfxFromSearch) return;
+        // Two frames: the new page is laid out and painted under the dialog.
+        requestAnimationFrame(() => requestAnimationFrame(finishHandoff));
       });
 
       openBtn?.addEventListener('click', openModal);
@@ -1649,6 +1695,11 @@ const FILTERABLE_SECTIONS = SECTIONS.filter((section) => section.callout);
 
       // Light-dismiss when clicking backdrop
       dialog.addEventListener('click', (e) => {
+        // Backdrop clicks target the <dialog> itself; clicks on its content
+        // target a child. Without this, a click fired from script (Enter on
+        // a selected result) has coordinates 0,0, looked "outside", and
+        // closed the dialog before its page swap (a flicker).
+        if (e.target !== dialog) return;
         const rect = dialog.getBoundingClientRect();
         const isInDialog = (
           rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
